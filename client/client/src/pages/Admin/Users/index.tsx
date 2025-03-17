@@ -23,7 +23,7 @@ import {
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
-import { API_BASE_URL } from '../../../config';
+import { usersAPI, authAPI } from '../../../services/api';
 
 interface User {
   _id: string;
@@ -52,18 +52,14 @@ const UsersManagement: React.FC = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/v1/users`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      const data = await response.json();
-      if (data.success) {
-        setUsers(data.data);
+      const response = await usersAPI.getAll();
+      if (response.data.success) {
+        setUsers(response.data.data);
       } else {
-        enqueueSnackbar(data.message || 'Error fetching users', { variant: 'error' });
+        enqueueSnackbar(response.data.message || 'Error fetching users', { variant: 'error' });
       }
     } catch (error) {
+      console.error('Error fetching users:', error);
       enqueueSnackbar('Error fetching users', { variant: 'error' });
     } finally {
       setLoading(false);
@@ -119,22 +115,31 @@ const UsersManagement: React.FC = () => {
 
   const handleSubmit = async () => {
     try {
-      const url = editingUser
-        ? `${API_BASE_URL}/api/v1/users/${editingUser._id}`
-        : `${API_BASE_URL}/api/v1/users`;
+      if (!formData.name.trim() || !formData.email.trim()) {
+        enqueueSnackbar('Name and email are required', { variant: 'error' });
+        return;
+      }
 
-      const response = await fetch(url, {
-        method: editingUser ? 'PATCH' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify(formData),
-      });
+      let response;
+      if (editingUser) {
+        response = await usersAPI.update(editingUser._id, {
+          name: formData.name,
+          email: formData.email,
+          role: formData.role,
+        });
+      } else {
+        if (!formData.password.trim()) {
+          enqueueSnackbar('Password is required for new users', { variant: 'error' });
+          return;
+        }
+        response = await authAPI.register({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+        });
+      }
 
-      const data = await response.json();
-
-      if (data.success) {
+      if (response.data.success) {
         enqueueSnackbar(
           editingUser ? 'User updated successfully' : 'User created successfully',
           { variant: 'success' }
@@ -142,9 +147,10 @@ const UsersManagement: React.FC = () => {
         handleCloseDialog();
         fetchUsers();
       } else {
-        enqueueSnackbar(data.message || 'Operation failed', { variant: 'error' });
+        enqueueSnackbar(response.data.message || 'Operation failed', { variant: 'error' });
       }
     } catch (error) {
+      console.error('Error submitting user:', error);
       enqueueSnackbar('Operation failed', { variant: 'error' });
     }
   };
@@ -155,22 +161,15 @@ const UsersManagement: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/users/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
+      const response = await usersAPI.delete(id);
+      if (response.data.success) {
         enqueueSnackbar('User deleted successfully', { variant: 'success' });
         fetchUsers();
       } else {
-        enqueueSnackbar(data.message || 'Failed to delete user', { variant: 'error' });
+        enqueueSnackbar(response.data.message || 'Failed to delete user', { variant: 'error' });
       }
     } catch (error) {
+      console.error('Error deleting user:', error);
       enqueueSnackbar('Failed to delete user', { variant: 'error' });
     }
   };

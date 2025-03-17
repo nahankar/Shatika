@@ -22,8 +22,7 @@ import {
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
-import { API_BASE_URL } from '../../../config';
-import { productsAPI } from '../../../services/api';
+import { productsAPI, categoriesAPI, materialsAPI, artsAPI } from '../../../../services/api';
 
 interface Product {
   _id: string;
@@ -107,40 +106,34 @@ const ProductsManagement: React.FC = () => {
 
   const fetchCategories = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/categories`);
-      const data = await response.json();
-      if (data.success) {
-        setCategories(data.data);
-      }
+      const response = await categoriesAPI.getAll();
+      setCategories(response.data.data);
     } catch (error) {
+      console.error('Error fetching categories:', error);
       enqueueSnackbar('Error fetching categories', { variant: 'error' });
     }
   };
 
   const fetchMaterials = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/materials`);
-      const data = await response.json();
-      if (data.success) {
-        setMaterials(data.data);
-      }
+      const response = await materialsAPI.getAll();
+      setMaterials(response.data.data);
     } catch (error) {
+      console.error('Error fetching materials:', error);
       enqueueSnackbar('Error fetching materials', { variant: 'error' });
     }
   };
 
   const fetchArts = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/arts`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      const data = await response.json();
-      if (data.success) {
-        setArts(data.data);
+      const response = await artsAPI.getAll();
+      if (response.data.success) {
+        setArts(response.data.data);
+      } else {
+        enqueueSnackbar(response.data.message || 'Error fetching arts', { variant: 'error' });
       }
     } catch (error) {
+      console.error('Error fetching arts:', error);
       enqueueSnackbar('Error fetching arts', { variant: 'error' });
     }
   };
@@ -312,23 +305,14 @@ const ProductsManagement: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/products/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
+      const response = await productsAPI.delete(id);
+      if (response.data.success) {
         enqueueSnackbar('Product deleted successfully', { variant: 'success' });
         fetchProducts();
-      } else {
-        enqueueSnackbar(data.message || 'Failed to delete product', { variant: 'error' });
       }
     } catch (error) {
-      enqueueSnackbar('Failed to delete product', { variant: 'error' });
+      console.error('Error deleting product:', error);
+      enqueueSnackbar('Error deleting product', { variant: 'error' });
     }
   };
 

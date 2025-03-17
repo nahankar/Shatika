@@ -1,163 +1,73 @@
 import { Request, Response } from 'express';
 import Material from '../models/Material';
+import { catchAsync } from '../utils/catchAsync';
 
-// Get all materials (public)
-export const getMaterials = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const materials = await Material.find().sort('name');
-    
-    // If accessed from admin dashboard, include additional information
-    const isAdminDashboard = req.path.includes('/admin/dashboard');
-    const response = {
-      success: true,
-      count: materials.length,
-      data: materials,
-      ...(isAdminDashboard && {
-        message: 'Materials retrieved for admin dashboard',
-        isAdminView: true
-      })
-    };
+// Get all materials
+export const getMaterials = catchAsync(async (_req: Request, res: Response) => {
+  const materials = await Material.find();
+  return res.status(200).json({
+    success: true,
+    data: materials,
+  });
+});
 
-    res.json(response);
-  } catch (error: any) {
-    res.status(500).json({
+// Get material by ID
+export const getMaterial = catchAsync(async (req: Request, res: Response) => {
+  const material = await Material.findById(req.params.id);
+  if (!material) {
+    return res.status(404).json({
       success: false,
-      message: 'Error fetching materials',
-      error: error.message,
+      message: 'Material not found',
     });
   }
-};
+  return res.status(200).json({
+    success: true,
+    data: material,
+  });
+});
 
-// Get single material (public)
-export const getMaterial = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const material = await Material.findById(req.params.id);
-    if (!material) {
-      res.status(404).json({
-        success: false,
-        message: 'Material not found',
-      });
-      return;
-    }
+// Create material
+export const createMaterial = catchAsync(async (req: Request, res: Response) => {
+  const material = await Material.create(req.body);
+  return res.status(201).json({
+    success: true,
+    data: material,
+  });
+});
 
-    // If accessed from admin dashboard, include additional information
-    const isAdminDashboard = req.path.includes('/admin/dashboard');
-    const response = {
-      success: true,
-      data: material,
-      ...(isAdminDashboard && {
-        message: 'Material retrieved for admin dashboard',
-        isAdminView: true
-      })
-    };
+// Update material
+export const updateMaterial = catchAsync(async (req: Request, res: Response) => {
+  const material = await Material.findByIdAndUpdate(req.params.id, req.body, {
+    new: true,
+    runValidators: true,
+  });
 
-    res.json(response);
-  } catch (error: any) {
-    res.status(500).json({
+  if (!material) {
+    return res.status(404).json({
       success: false,
-      message: 'Error fetching material',
-      error: error.message,
+      message: 'Material not found',
     });
   }
-};
 
-// Create material (admin only)
-export const createMaterial = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { name } = req.body;
+  return res.status(200).json({
+    success: true,
+    data: material,
+  });
+});
 
-    const material = await Material.create({ name });
+// Delete material
+export const deleteMaterial = catchAsync(async (req: Request, res: Response) => {
+  const material = await Material.findByIdAndDelete(req.params.id);
 
-    res.status(201).json({
-      success: true,
-      message: 'Material created successfully',
-      data: material,
-      isAdminView: true
-    });
-  } catch (error: any) {
-    res.status(500).json({
+  if (!material) {
+    return res.status(404).json({
       success: false,
-      message: 'Error creating material',
-      error: error.message,
+      message: 'Material not found',
     });
   }
-};
 
-// Update material (admin only)
-export const updateMaterial = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { name } = req.body;
-
-    const material = await Material.findByIdAndUpdate(
-      req.params.id,
-      { name },
-      {
-        new: true,
-        runValidators: true,
-      }
-    );
-
-    if (!material) {
-      res.status(404).json({
-        success: false,
-        message: 'Material not found',
-      });
-      return;
-    }
-
-    res.json({
-      success: true,
-      message: 'Material updated successfully',
-      data: material,
-      isAdminView: true
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: 'Error updating material',
-      error: error.message,
-    });
-  }
-};
-
-// Delete material (admin only)
-export const deleteMaterial = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const material = await Material.findById(req.params.id);
-
-    if (!material) {
-      res.status(404).json({
-        success: false,
-        message: 'Material not found',
-      });
-      return;
-    }
-
-    // Check if material is being used by any products
-    const Product = require('../models/Product').default;
-    const productsUsingMaterial = await Product.countDocuments({ material: req.params.id });
-
-    if (productsUsingMaterial > 0) {
-      res.status(400).json({
-        success: false,
-        message: 'Cannot delete material as it is being used by existing products',
-        productsCount: productsUsingMaterial,
-      });
-      return;
-    }
-
-    await material.deleteOne();
-
-    res.json({
-      success: true,
-      message: 'Material deleted successfully',
-      isAdminView: true
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: 'Error deleting material',
-      error: error.message,
-    });
-  }
-}; 
+  return res.status(200).json({
+    success: true,
+    data: {},
+  });
+}); 

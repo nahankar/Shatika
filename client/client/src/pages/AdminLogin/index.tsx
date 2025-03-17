@@ -24,7 +24,7 @@ const AdminLogin = () => {
     if (isAuthenticated) {
       if (isAdmin) {
         console.log('Navigating to admin dashboard...');
-        navigate('/admin/dashboard');
+        navigate('/admin');
       } else {
         console.log('Not an admin, redirecting to home...');
         navigate('/');

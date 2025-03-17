@@ -16,10 +16,11 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  CircularProgress,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
-import { API_BASE_URL } from '../../../config';
+import { categoriesAPI } from '../../../../services/api';
 
 interface Category {
   _id: string;
@@ -41,18 +42,14 @@ const CategoriesManagement: React.FC = () => {
   const fetchCategories = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/v1/categories`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      const data = await response.json();
-      if (data.success) {
-        setCategories(data.data);
+      const response = await categoriesAPI.getAll();
+      if (response.data.success) {
+        setCategories(response.data.data);
       } else {
-        enqueueSnackbar(data.message || 'Error fetching categories', { variant: 'error' });
+        enqueueSnackbar(response.data.message || 'Error fetching categories', { variant: 'error' });
       }
     } catch (error) {
+      console.error('Error fetching categories:', error);
       enqueueSnackbar('Error fetching categories', { variant: 'error' });
     } finally {
       setLoading(false);
@@ -83,22 +80,14 @@ const CategoriesManagement: React.FC = () => {
         return;
       }
 
-      const url = editingCategory
-        ? `${API_BASE_URL}/api/v1/categories/${editingCategory._id}`
-        : `${API_BASE_URL}/api/v1/categories`;
+      let response;
+      if (editingCategory) {
+        response = await categoriesAPI.update(editingCategory._id, categoryName);
+      } else {
+        response = await categoriesAPI.create(categoryName);
+      }
 
-      const response = await fetch(url, {
-        method: editingCategory ? 'PATCH' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({ name: categoryName }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
+      if (response.data.success) {
         enqueueSnackbar(
           editingCategory ? 'Category updated successfully' : 'Category created successfully',
           { variant: 'success' }
@@ -106,9 +95,10 @@ const CategoriesManagement: React.FC = () => {
         handleCloseDialog();
         fetchCategories();
       } else {
-        enqueueSnackbar(data.message || 'Operation failed', { variant: 'error' });
+        enqueueSnackbar(response.data.message || 'Operation failed', { variant: 'error' });
       }
     } catch (error) {
+      console.error('Error submitting category:', error);
       enqueueSnackbar('Operation failed', { variant: 'error' });
     }
   };
@@ -119,22 +109,15 @@ const CategoriesManagement: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/categories/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
+      const response = await categoriesAPI.delete(id);
+      if (response.data.success) {
         enqueueSnackbar('Category deleted successfully', { variant: 'success' });
         fetchCategories();
       } else {
-        enqueueSnackbar(data.message || 'Failed to delete category', { variant: 'error' });
+        enqueueSnackbar(response.data.message || 'Failed to delete category', { variant: 'error' });
       }
     } catch (error) {
+      console.error('Error deleting category:', error);
       enqueueSnackbar('Failed to delete category', { variant: 'error' });
     }
   };

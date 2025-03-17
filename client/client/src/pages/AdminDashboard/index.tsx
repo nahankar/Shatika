@@ -6,7 +6,7 @@ import ProductsManagement from './ProductsManagement';
 import UsersManagement from './UsersManagement';
 import MaterialsManagement from '../Admin/MaterialsManagement';
 import CategoriesManagement from '../Admin/CategoriesManagement';
-import ArtsManagement from '../Admin/ArtsManagement';
+import ArtsManagement from '../Admin/ArtsManagement/index';
 import HomeSectionsManagement from './HomeSectionsManagement';
 
 const navbarHeight = 64; // Standard MUI AppBar height

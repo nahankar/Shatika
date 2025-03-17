@@ -1,5 +1,4 @@
 import axios, { AxiosError } from 'axios';
-import { API_BASE_URL } from '../config';
 import { clearAuthState } from '../redux/slices/authSlice';
 import { clearCartState } from '../redux/slices/cartSlice';
 import { clearFavorites } from '../redux/slices/favoritesSlice';
@@ -18,7 +17,7 @@ interface ApiErrorResponse {
 
 // Create axios instance with base configuration
 const axiosInstance = axios.create({
-  baseURL: `${API_BASE_URL}/api/v1`,
+  baseURL: '/api',
   withCredentials: true,
 });
 
@@ -39,9 +38,11 @@ axiosInstance.interceptors.request.use(
       config.headers['Accept'] = 'application/json';
     }
     
-    console.log('API Request:', {
+    console.log('API Request Details:', {
       method: config.method,
       url: config.url,
+      baseURL: config.baseURL,
+      fullURL: `${config.baseURL}${config.url}`,
       headers: config.headers,
       data: config.data instanceof FormData ? 'FormData' : config.data,
     });
@@ -49,6 +50,7 @@ axiosInstance.interceptors.request.use(
   },
   (error) => {
     console.error('API Request Error:', error);
+    console.error('Error Config:', error.config);
     return Promise.reject(error);
   }
 );
@@ -56,13 +58,27 @@ axiosInstance.interceptors.request.use(
 // Response interceptor to handle common errors
 axiosInstance.interceptors.response.use(
   (response) => {
-    console.log('API Response:', {
+    console.log('API Response Details:', {
       status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
       data: response.data,
+      config: {
+        method: response.config.method,
+        url: response.config.url,
+        baseURL: response.config.baseURL,
+      }
     });
     return response;
   },
   async (error: AxiosError<ApiErrorResponse>) => {
+    console.error('API Response Error:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      config: error.config,
+    });
     if (error.response?.status === 401) {
       console.log('Received 401 error, clearing state and redirecting to login');
       
@@ -123,6 +139,7 @@ export const productsAPI = {
   },
   delete: (id: string) => axiosInstance.delete(`/products/${id}`),
   toggleFavorite: (id: string) => axiosInstance.post(`/products/${id}/favorite`),
+  getAnalytics: () => axiosInstance.get('/products/analytics'),
 };
 
 // Users API
@@ -133,11 +150,19 @@ export const usersAPI = {
   delete: (id: string) => axiosInstance.delete(`/users/${id}`),
   getProfile: () => axiosInstance.get('/users/profile'),
   updateProfile: (data: any) => axiosInstance.put('/users/profile', data),
+  getAnalytics: () => axiosInstance.get('/users/analytics'),
 };
 
 // Favorites API
 export const favoritesAPI = {
   getAll: () => axiosInstance.get('/favorites'),
+  getUserFavorites: (userId: string) => {
+    if (!userId) {
+      console.error('getUserFavorites called without userId');
+      return Promise.reject(new Error('User ID is required'));
+    }
+    return axiosInstance.get(`/users/${userId}/favorites`);
+  },
   add: (productId: string) => axiosInstance.post('/favorites', { productId }),
   remove: (productId: string) => axiosInstance.delete(`/favorites/${productId}`),
 };
@@ -145,16 +170,41 @@ export const favoritesAPI = {
 // Cart API
 export const cartAPI = {
   getItems: () => axiosInstance.get('/cart'),
-  add: (productId: string, quantity: number, size?: string, color?: string) =>
-    axiosInstance.post('/cart', { productId, quantity, size, color }),
+  getUserCart: (userId: string) => {
+    if (!userId) {
+      console.error('getUserCart called without userId');
+      return Promise.reject(new Error('User ID is required'));
+    }
+    return axiosInstance.get(`/users/${userId}/cart`);
+  },
+  add: (productId: string, quantity: number, size?: string, color?: string) => {
+    console.log('API: Adding to cart:', { productId, quantity, size, color });
+    return axiosInstance.post('/cart', { productId, quantity, size, color });
+  },
+  
   update: (cartItemId: string, quantity: number) => {
-    console.log('API: Updating cart item:', { cartItemId, quantity });
+    console.log('API: Updating cart item:', { 
+      cartItemId, 
+      cartItemIdType: typeof cartItemId,
+      quantity 
+    });
+    if (!cartItemId) {
+      return Promise.reject(new Error('Cart item ID is required'));
+    }
     return axiosInstance.put(`/cart/${cartItemId}`, { quantity });
   },
+  
   remove: (cartItemId: string) => {
-    console.log('API: Removing cart item:', { cartItemId });
+    console.log('API: Removing cart item:', { 
+      cartItemId,
+      cartItemIdType: typeof cartItemId
+    });
+    if (!cartItemId) {
+      return Promise.reject(new Error('Cart item ID is required'));
+    }
     return axiosInstance.delete(`/cart/${cartItemId}`);
   },
+  
   clear: () => axiosInstance.delete('/cart'),
 };
 
@@ -175,31 +225,84 @@ export const materialsAPI = {
 };
 
 export const artsAPI = {
-  getAll: () => axiosInstance.get('/arts'),
-  getById: (id: string) => axiosInstance.get(`/arts/${id}`),
-  create: (formData: FormData) => axiosInstance.post('/arts', formData),
-  update: (id: string, formData: FormData) => {
-    console.log('Updating art:', { id });
-    console.log('FormData contents:');
-    for (const pair of formData.entries()) {
-      console.log(pair[0], pair[1]);
+  getAll: async () => {
+    try {
+      const response = await axiosInstance.get('/arts');
+      console.log('[ArtsAPI] Raw Response:', response);
+
+      // Return the full response to let the component handle the data structure
+      return response;
+    } catch (error) {
+      console.error('[ArtsAPI] Error in getAll:', error);
+      throw error;
     }
-    return axiosInstance.patch(`/arts/${id}`, formData);
   },
-  delete: (id: string) => axiosInstance.delete(`/arts/${id}`),
+
+  getById: async (id: string) => {
+    try {
+      const response = await axiosInstance.get(`/arts/${id}`);
+      return response;
+    } catch (error) {
+      console.error('[ArtsAPI] Error fetching art:', error);
+      throw error;
+    }
+  },
+
+  create: async (formData: FormData) => {
+    try {
+      console.log('[ArtsAPI] Creating art with form data:', 
+        Object.fromEntries(formData.entries())
+      );
+      
+      const response = await axiosInstance.post('/arts', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      return response;
+    } catch (error) {
+      console.error('[ArtsAPI] Error creating art:', error);
+      throw error;
+    }
+  },
+
+  update: async (id: string, formData: FormData) => {
+    try {
+      console.log('[ArtsAPI] Updating art:', id);
+      console.log('[ArtsAPI] Form data:', 
+        Object.fromEntries(formData.entries())
+      );
+
+      const response = await axiosInstance.patch(`/arts/${id}`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      return response;
+    } catch (error) {
+      console.error('[ArtsAPI] Error updating art:', error);
+      throw error;
+    }
+  },
+
+  delete: async (id: string) => {
+    try {
+      const response = await axiosInstance.delete(`/arts/${id}`);
+      return response;
+    } catch (error) {
+      console.error('[ArtsAPI] Error deleting art:', error);
+      throw error;
+    }
+  },
 };
 
 export const homeSectionsAPI = {
   getAll: () => axiosInstance.get('/home-sections'),
-  create: (formData: FormData) => axiosInstance.post('/home-sections', formData),
-  update: (id: string, formData: FormData) => {
-    console.log('Updating home section:', { id });
-    console.log('FormData contents:');
-    for (const pair of formData.entries()) {
-      console.log(pair[0], pair[1]);
-    }
-    return axiosInstance.patch(`/home-sections/${id}`, formData);
-  },
+  getById: (id: string) => axiosInstance.get(`/home-sections/${id}`),
+  create: (data: any) => axiosInstance.post('/home-sections', data),
+  update: (id: string, data: any) => axiosInstance.put(`/home-sections/${id}`, data),
   delete: (id: string) => axiosInstance.delete(`/home-sections/${id}`),
 };
 

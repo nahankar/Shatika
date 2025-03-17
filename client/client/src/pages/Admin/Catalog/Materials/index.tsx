@@ -16,11 +16,11 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  CircularProgress,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
-import { useDispatch } from 'react-redux';
 import { useSnackbar } from 'notistack';
-import { API_BASE_URL } from '../../../config';
+import { materialsAPI } from '../../../../services/api';
 
 interface Material {
   _id: string;
@@ -28,7 +28,6 @@ interface Material {
 }
 
 const MaterialsManagement: React.FC = () => {
-  const dispatch = useDispatch();
   const { enqueueSnackbar } = useSnackbar();
   const [materials, setMaterials] = useState<Material[]>([]);
   const [openDialog, setOpenDialog] = useState(false);
@@ -36,7 +35,6 @@ const MaterialsManagement: React.FC = () => {
   const [materialName, setMaterialName] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Fetch materials on component mount
   useEffect(() => {
     fetchMaterials();
   }, []);
@@ -44,18 +42,14 @@ const MaterialsManagement: React.FC = () => {
   const fetchMaterials = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/v1/materials`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      const data = await response.json();
-      if (data.success) {
-        setMaterials(data.data);
+      const response = await materialsAPI.getAll();
+      if (response.data.success) {
+        setMaterials(response.data.data);
       } else {
-        enqueueSnackbar(data.message || 'Error fetching materials', { variant: 'error' });
+        enqueueSnackbar(response.data.message || 'Error fetching materials', { variant: 'error' });
       }
     } catch (error) {
+      console.error('Error fetching materials:', error);
       enqueueSnackbar('Error fetching materials', { variant: 'error' });
     } finally {
       setLoading(false);
@@ -86,22 +80,14 @@ const MaterialsManagement: React.FC = () => {
         return;
       }
 
-      const url = editingMaterial
-        ? `${API_BASE_URL}/api/v1/materials/${editingMaterial._id}`
-        : `${API_BASE_URL}/api/v1/materials`;
+      let response;
+      if (editingMaterial) {
+        response = await materialsAPI.update(editingMaterial._id, materialName);
+      } else {
+        response = await materialsAPI.create(materialName);
+      }
 
-      const response = await fetch(url, {
-        method: editingMaterial ? 'PATCH' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({ name: materialName }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
+      if (response.data.success) {
         enqueueSnackbar(
           editingMaterial ? 'Material updated successfully' : 'Material created successfully',
           { variant: 'success' }
@@ -109,9 +95,10 @@ const MaterialsManagement: React.FC = () => {
         handleCloseDialog();
         fetchMaterials();
       } else {
-        enqueueSnackbar(data.message || 'Operation failed', { variant: 'error' });
+        enqueueSnackbar(response.data.message || 'Operation failed', { variant: 'error' });
       }
     } catch (error) {
+      console.error('Error submitting material:', error);
       enqueueSnackbar('Operation failed', { variant: 'error' });
     }
   };
@@ -122,22 +109,15 @@ const MaterialsManagement: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/materials/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
+      const response = await materialsAPI.delete(id);
+      if (response.data.success) {
         enqueueSnackbar('Material deleted successfully', { variant: 'success' });
         fetchMaterials();
       } else {
-        enqueueSnackbar(data.message || 'Failed to delete material', { variant: 'error' });
+        enqueueSnackbar(response.data.message || 'Failed to delete material', { variant: 'error' });
       }
     } catch (error) {
+      console.error('Error deleting material:', error);
       enqueueSnackbar('Failed to delete material', { variant: 'error' });
     }
   };

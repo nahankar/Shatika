@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import {
   Box,
@@ -15,7 +15,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { RootState, useAppDispatch } from '../../redux/store';
 import { setFilters } from '../../redux/slices/productsSlice';
-import { categoriesAPI, materialsAPI } from '../../services/api';
+import { categoriesAPI, materialsAPI, artsAPI } from '../../services/api';
 import { API_BASE_URL } from '../../config';
 
 interface Category {
@@ -45,59 +45,53 @@ const ProductFilters = () => {
   const [arts, setArts] = useState<Art[]>([]);
 
   useEffect(() => {
-    // Fetch categories from API
     const fetchCategories = async () => {
       try {
         const response = await categoriesAPI.getAll();
-        setCategories(response.data.data);
+        if (response.data.success) {
+          setCategories(response.data.data);
+        } else {
+          console.error('Failed to fetch categories:', response.data.message);
+          setCategories([]);
+        }
       } catch (error) {
         console.error('Failed to fetch categories:', error);
+        setCategories([]);
       }
     };
-    fetchCategories();
 
-    // Fetch materials from API
     const fetchMaterials = async () => {
       try {
         const response = await materialsAPI.getAll();
-        setMaterials(response.data.data);
+        if (response.data.success) {
+          setMaterials(response.data.data);
+        } else {
+          console.error('Failed to fetch materials:', response.data.message);
+          setMaterials([]);
+        }
       } catch (error) {
         console.error('Failed to fetch materials:', error);
+        setMaterials([]);
       }
     };
-    fetchMaterials();
 
-    // Fetch arts from API
     const fetchArts = async () => {
       try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          console.warn('No authentication token found');
-          return;
-        }
-
-        const response = await fetch(`${API_BASE_URL}/api/v1/arts`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        if (data.success) {
-          setArts(data.data);
+        const response = await artsAPI.getAll();
+        if (response.data.success) {
+          setArts(response.data.data);
         } else {
-          console.error('Failed to fetch arts:', data.message);
+          console.error('Failed to fetch arts:', response.data.message);
+          setArts([]);
         }
       } catch (error) {
         console.error('Failed to fetch arts:', error);
-        setArts([]); // Set empty array on error
+        setArts([]);
       }
     };
+
+    fetchCategories();
+    fetchMaterials();
     fetchArts();
   }, []);
 
@@ -128,10 +122,12 @@ const ProductFilters = () => {
     dispatch(setFilters({ arts: newArts }));
   };
 
-  const handlePriceChange = (event: Event, newValue: number | number[]) => {
-    const newRange = newValue as [number, number];
-    setPriceRange(newRange);
-    dispatch(setFilters({ priceRange: newRange }));
+  const handlePriceChange = (_event: Event, newValue: number | number[]) => {
+    if (Array.isArray(newValue) && newValue.length === 2) {
+      const [min, max] = newValue;
+      setPriceRange([min, max]);
+      dispatch(setFilters({ priceRange: [min, max] }));
+    }
   };
 
   const handleClearFilters = () => {

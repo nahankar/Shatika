@@ -41,16 +41,17 @@ if (!fs.existsSync(uploadsDir)) {
 app.use('/uploads', express.static(uploadsDir));
 
 // Public routes
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/products', productRoutes);
-app.use('/api/v1/categories', categoryRoutes);
-app.use('/api/v1/materials', materialRoutes);
-app.use('/api/v1/arts', artRoutes);
-app.use('/api/v1/home-sections', homeSectionRoutes);
-app.use('/api/v1/favorites', favoriteRoutes);
-app.use('/api/v1/cart', cartRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/materials', materialRoutes);
+app.use('/api/arts', artRoutes);
+app.use('/api/home-sections', homeSectionRoutes);
+app.use('/api/favorites', favoriteRoutes);
+app.use('/api/cart', cartRoutes);
 
+// Error handling middleware
 // Admin dashboard routes
 app.use('/api/v1/admin/dashboard', protect, restrictTo('admin'));
 

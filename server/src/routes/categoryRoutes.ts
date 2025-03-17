@@ -7,6 +7,7 @@ import {
   deleteCategory,
 } from '../controllers/categoryController';
 import { protect, restrictTo } from '../middleware/authMiddleware';
+import { upload } from '../utils/cloudinary';
 
 const router = express.Router();
 
@@ -18,12 +19,13 @@ router.get('/:id', getCategory);
 router.use(protect);
 router.use(restrictTo('admin'));
 
-router.route('/admin/dashboard/categories')
-  .get(getCategories)  // Get all categories in admin dashboard
-  .post(createCategory);  // Create new category
+router.route('/categories')
+  .get(getCategories)
+  .post(upload.single('image'), createCategory);
 
-router.route('/admin/dashboard/categories/:id')
-  .patch(updateCategory)  // Update category
-  .delete(deleteCategory);  // Delete category
+router.route('/categories/:id')
+  .get(getCategory)
+  .put(upload.single('image'), updateCategory)
+  .delete(deleteCategory);
 
 export default router; 

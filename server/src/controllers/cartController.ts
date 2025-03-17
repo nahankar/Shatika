@@ -117,10 +117,17 @@ export const updateCartItem = catchAsync(async (req: Request, res: Response) => 
   const { cartItemId } = req.params;
   const { quantity } = req.body;
 
-  if (!quantity) {
+  console.log('Updating cart item:', {
+    userId: userId?.toString(),
+    cartItemId,
+    quantity,
+    body: req.body
+  });
+
+  if (!quantity || quantity < 1) {
     return res.status(400).json({
       success: false,
-      message: 'Quantity is required'
+      message: 'Quantity must be greater than 0'
     });
   }
 
@@ -132,7 +139,16 @@ export const updateCartItem = catchAsync(async (req: Request, res: Response) => 
     });
   }
 
-  const cartItemIndex = user.cart.findIndex((item: CartItemType) => item._id.toString() === cartItemId);
+  console.log('Current cart:', user.cart.map(item => ({
+    _id: item._id.toString(),
+    product: item.product.toString(),
+    quantity: item.quantity
+  })));
+
+  const cartItemIndex = user.cart.findIndex(
+    (item) => item._id.toString() === cartItemId
+  );
+
   if (cartItemIndex === -1) {
     return res.status(404).json({
       success: false,
@@ -143,9 +159,15 @@ export const updateCartItem = catchAsync(async (req: Request, res: Response) => 
   user.cart[cartItemIndex].quantity = quantity;
   await user.save();
 
+  console.log('Updated cart item:', {
+    itemId: user.cart[cartItemIndex]._id.toString(),
+    quantity: user.cart[cartItemIndex].quantity
+  });
+
   return res.status(200).json({
     success: true,
-    message: 'Cart updated successfully'
+    message: 'Cart updated successfully',
+    data: user.cart[cartItemIndex]
   });
 });
 
@@ -176,28 +198,26 @@ export const removeFromCart = catchAsync(async (req: Request, res: Response) => 
 
   console.log('Current cart:', user.cart.map(item => ({
     _id: item._id.toString(),
-    _idType: typeof item._id,
     product: item.product.toString()
   })));
 
-  const cartItemToRemove = user.cart.find(item => item._id.toString() === cartItemId);
-  if (!cartItemToRemove) {
-    console.log('Cart item not found:', cartItemId);
+  // Find the cart item before removing
+  const cartItem = user.cart.find(item => item._id.toString() === cartItemId);
+  if (!cartItem) {
     return res.status(404).json({
       success: false,
       message: 'Cart item not found'
     });
   }
 
-  console.log('Found cart item to remove:', {
-    _id: cartItemToRemove._id.toString(),
-    product: cartItemToRemove.product.toString()
-  });
+  // Remove the item using filter instead of $pull
+  user.cart = user.cart.filter(item => item._id.toString() !== cartItemId);
+  await user.save();
 
-  // Use $pull to remove the cart item
-  await User.findByIdAndUpdate(userId, {
-    $pull: { cart: { _id: new Types.ObjectId(cartItemId) } }
-  }, { new: true });
+  console.log('Cart after removal:', user.cart.map(item => ({
+    _id: item._id.toString(),
+    product: item.product.toString()
+  })));
 
   return res.status(200).json({
     success: true,

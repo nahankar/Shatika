@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { setFilters } from '../../redux/slices/productsSlice';
 import { useEffect, useState } from 'react';
-import { API_BASE_URL } from '../../config';
+import { homeSectionsAPI } from '../../services/api';
+import { useSnackbar } from 'notistack';
 
 interface HomeSection {
   _id: string;
@@ -17,8 +18,10 @@ interface HomeSection {
 const Home = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const { enqueueSnackbar } = useSnackbar();
   const [categorySections, setCategorySections] = useState<HomeSection[]>([]);
   const [artSections, setArtSections] = useState<HomeSection[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchSections();
@@ -26,10 +29,10 @@ const Home = () => {
 
   const fetchSections = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/home-sections`);
-      const data = await response.json();
-      if (data.success) {
-        const sections = data.data as HomeSection[];
+      setLoading(true);
+      const response = await homeSectionsAPI.getAll();
+      if (response.data.success) {
+        const sections = response.data.data as HomeSection[];
         setCategorySections(sections
           .filter((s: HomeSection) => s.type === 'category' && s.isActive)
           .sort((a: HomeSection, b: HomeSection) => a.displayOrder - b.displayOrder)
@@ -38,9 +41,14 @@ const Home = () => {
           .filter((s: HomeSection) => s.type === 'art' && s.isActive)
           .sort((a: HomeSection, b: HomeSection) => a.displayOrder - b.displayOrder)
         );
+      } else {
+        enqueueSnackbar(response.data.message || 'Error fetching sections', { variant: 'error' });
       }
     } catch (error) {
       console.error('Error fetching sections:', error);
+      enqueueSnackbar('Error fetching sections', { variant: 'error' });
+    } finally {
+      setLoading(false);
     }
   };
 
