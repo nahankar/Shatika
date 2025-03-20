@@ -24,7 +24,9 @@ import {
   ChevronRight as ChevronRightIcon,
   RotateRight as RotateIcon,
   Delete as TrashIcon,
+  BorderOuter as BorderIcon,
 } from '@mui/icons-material';
+import styles from './DesignPage.module.css';
 
 interface DesignPageProps {
   projectId?: string;
@@ -53,18 +55,31 @@ interface DesignState {
   'Border 2': PlacedShape[];
 }
 
+interface DragItem {
+  shape: PlacedShape;
+  fromArea: string;
+}
+
 const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedColor, setSelectedColor] = useState('#666666');
   const [selectedShape, setSelectedShape] = useState<string | null>(null);
   const [colorPage, setColorPage] = useState(0);
-  const dragItemRef = useRef<DesignShape | null>(null);
+  const [isGridVisible, setIsGridVisible] = useState(false);
+  const [isBordersVisible, setIsBordersVisible] = useState(true);
+  const [isLocked, setIsLocked] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [undoStack, setUndoStack] = useState<DesignState[]>([]);
+  const [redoStack, setRedoStack] = useState<DesignState[]>([]);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const dragItemRef = useRef<DragItem | null>(null);
 
   // Separate placed shapes for each area
   const [bodyShapes, setBodyShapes] = useState<PlacedShape[]>([]);
   const [palluShapes, setPalluShapes] = useState<PlacedShape[]>([]);
   const [border1Shapes, setBorder1Shapes] = useState<PlacedShape[]>([]);
   const [border2Shapes, setBorder2Shapes] = useState<PlacedShape[]>([]);
+  const [draggedShape, setDraggedShape] = useState<DesignShape | null>(null);
 
   // Extended color palette with 12 colors per page (6x2)
   const allColors = [
@@ -267,57 +282,251 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
     }
   };
 
-  const handleDragStart = (shape: DesignShape) => {
-    dragItemRef.current = shape;
-  };
+  // Add keyboard movement amount
+  const KEYBOARD_MOVE_AMOUNT = 20; // Grid size for movement
 
-  const handleDrop = (e: React.DragEvent, targetArea: string) => {
-    e.preventDefault();
-    const shape = dragItemRef.current;
-    if (!shape) return;
+  // Add keyboard event listener to the window
+  React.useEffect(() => {
+    const keysPressed = new Set<string>();
+    let animationFrameId: number | null = null;
 
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = e.clientX - rect.left - 25; // Center the shape
-    const y = e.clientY - rect.top - 25;  // Center the shape
+    const moveShape = (timestamp: number) => {
+      if (!selectedShape || isLocked || keysPressed.size === 0) {
+        animationFrameId = null;
+        return;
+      }
 
-    const newShape: PlacedShape = {
-      ...shape,
-      x,
-      y,
-      width: 50,
-      height: 50,
-      rotation: 0,
-      color: selectedColor,
+      const [area, indexStr] = selectedShape.split('-');
+      const index = parseInt(indexStr);
+      const [setShapes, shapes] = getShapeSetterForArea(area);
+      const shape = shapes[index];
+
+      if (!shape) {
+        animationFrameId = null;
+        return;
+      }
+
+      const container = document.querySelector(`[data-draggable-area="${area}"]`);
+      if (!container) {
+        animationFrameId = null;
+        return;
+      }
+
+      const containerBounds = container.getBoundingClientRect();
+      let newX = shape.x;
+      let newY = shape.y;
+
+      // Adjust position based on all pressed keys
+      if (keysPressed.has('ArrowLeft')) newX -= KEYBOARD_MOVE_AMOUNT;
+      if (keysPressed.has('ArrowRight')) newX += KEYBOARD_MOVE_AMOUNT;
+      if (keysPressed.has('ArrowUp')) newY -= KEYBOARD_MOVE_AMOUNT;
+      if (keysPressed.has('ArrowDown')) newY += KEYBOARD_MOVE_AMOUNT;
+
+      // Clamp to container boundaries
+      newX = Math.max(0, Math.min(containerBounds.width - shape.width, newX));
+      newY = Math.max(0, Math.min(containerBounds.height - shape.height, newY));
+
+      // Update state if position changed
+      if (newX !== shape.x || newY !== shape.y) {
+        setShapes(shapes.map((s, i) =>
+          i === index ? { ...s, x: newX, y: newY } : s
+        ));
+      }
+
+      // Continue animation
+      animationFrameId = requestAnimationFrame(moveShape);
     };
 
-    const [setShapes, shapes] = getShapeSetterForArea(targetArea);
-    setShapes([...shapes, newShape]);
-    dragItemRef.current = null;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!selectedShape || isLocked) return;
+
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        e.preventDefault();
+        if (!keysPressed.has(e.key)) {
+          keysPressed.add(e.key);
+          if (animationFrameId === null) {
+            animationFrameId = requestAnimationFrame(moveShape);
+          }
+        }
+      }
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        const [area, indexStr] = selectedShape.split('-');
+        const index = parseInt(indexStr);
+        const [_, shapes] = getShapeSetterForArea(area);
+        const shape = shapes[index];
+        if (shape) {
+          handleShapeDelete(shape.id, area);
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        e.preventDefault();
+        keysPressed.delete(e.key);
+        if (keysPressed.size === 0 && animationFrameId !== null) {
+          cancelAnimationFrame(animationFrameId);
+          animationFrameId = null;
+          saveToHistory();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [selectedShape, isLocked, bodyShapes, palluShapes, border1Shapes, border2Shapes]);
+
+  const handleDragStart = (shape: DesignShape | PlacedShape, fromArea?: string) => {
+    if ('x' in shape && fromArea) {
+      // If dragging an existing placed shape, store the reference
+      dragItemRef.current = { shape: { ...shape }, fromArea }; // Create a copy of the shape
+    } else {
+      // If dragging a new shape from the palette, create a completely new object
+      const newId = `${shape.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const shapeCopy = {
+        ...shape,
+        id: newId
+      };
+      setDraggedShape(shapeCopy);
+      // Clear any existing drag reference to prevent interference
+      dragItemRef.current = null;
+    }
+  };
+
+  const GRID_SIZE = 20; // Size of grid cells for snapping
+  const DEFAULT_SHAPE_SIZE = 40; // Default size of shapes
+
+  const snapToGrid = (value: number): number => {
+    return Math.round(value / GRID_SIZE) * GRID_SIZE;
   };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
   };
 
+  const handleDrop = (e: React.DragEvent, areaName: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Get the drop target's position and dimensions
+    const dropTarget = e.currentTarget.getBoundingClientRect();
+    const dropTargetElement = e.currentTarget as HTMLElement;
+    
+    // Calculate the raw position relative to the drop target
+    const rawX = e.clientX - dropTarget.left;
+    const rawY = e.clientY - dropTarget.top;
+
+    // Add scroll offset
+    const scrollX = dropTargetElement.scrollLeft;
+    const scrollY = dropTargetElement.scrollTop;
+
+    // Calculate final position with snapping
+    let x: number;
+    let y: number;
+
+    if (dragItemRef.current) {
+      // For existing shapes (moving)
+      x = Math.max(0, snapToGrid(rawX + scrollX));
+      y = Math.max(0, snapToGrid(rawY + scrollY));
+    } else {
+      // For new shapes (initial placement)
+      // Center the shape on the cursor by subtracting half the shape size
+      const halfSize = DEFAULT_SHAPE_SIZE / 2;
+      x = Math.max(0, snapToGrid(rawX - halfSize + scrollX));
+      y = Math.max(0, snapToGrid(rawY - halfSize + scrollY));
+    }
+
+    // Ensure the shape stays within the bounds of the drop target
+    const maxX = dropTarget.width - DEFAULT_SHAPE_SIZE;
+    const maxY = dropTarget.height - DEFAULT_SHAPE_SIZE;
+    x = Math.min(Math.max(0, x), maxX);
+    y = Math.min(Math.max(0, y), maxY);
+
+    if (dragItemRef.current) {
+      // Moving an existing shape
+      const { shape, fromArea } = dragItemRef.current;
+      
+      if (fromArea === areaName) {
+        // If dropping in the same area, just update position
+        const [setShapes, shapes] = getShapeSetterForArea(areaName);
+        const updatedShapes = shapes.map(s => 
+          s.id === shape.id ? { ...s, x, y } : { ...s }
+        );
+        setShapes(updatedShapes);
+        
+        const newIndex = updatedShapes.findIndex(s => s.id === shape.id);
+        if (newIndex !== -1) {
+          setSelectedShape(`${areaName}-${newIndex}`);
+        }
+      } else {
+        // If dropping in a different area
+        const [setSourceShapes, sourceShapes] = getShapeSetterForArea(fromArea);
+        const [setTargetShapes, targetShapes] = getShapeSetterForArea(areaName);
+        
+        const newSourceShapes = sourceShapes.filter(s => s.id !== shape.id).map(s => ({...s}));
+        const movedShape = { ...shape, x, y };
+        const newTargetShapes = [...targetShapes.map(s => ({...s})), movedShape];
+        
+        setSourceShapes(newSourceShapes);
+        setTargetShapes(newTargetShapes);
+        
+        const newIndex = newTargetShapes.length - 1;
+        setSelectedShape(`${areaName}-${newIndex}`);
+      }
+    } else if (draggedShape) {
+      // Creating a new shape from the palette
+      const newShape: PlacedShape = {
+        ...draggedShape,
+        x,
+        y,
+        width: DEFAULT_SHAPE_SIZE,
+        height: DEFAULT_SHAPE_SIZE,
+        rotation: 0,
+        color: selectedColor,
+      };
+
+      const [setShapes, shapes] = getShapeSetterForArea(areaName);
+      const newShapes = [...shapes.map(s => ({...s})), newShape];
+      setShapes(newShapes);
+      
+      const newIndex = newShapes.length - 1;
+      setSelectedShape(`${areaName}-${newIndex}`);
+    }
+
+    // Save to history after all state updates are complete
+    saveToHistory();
+
+    // Clear drag states after everything is done
+    setDraggedShape(null);
+    dragItemRef.current = null;
+  };
+
   const handleShapeDelete = (shapeId: string, area: string) => {
     const [setShapes, shapes] = getShapeSetterForArea(area);
+    saveToHistory();
     setShapes(shapes.filter(shape => shape.id !== shapeId));
     setSelectedShape(null);
   };
 
-  // Add click handler to deselect shape when clicking outside
+  // Update handleBackgroundClick to properly handle deselection
   const handleBackgroundClick = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).classList.contains('draggable-area')) {
+    const target = e.target as HTMLElement;
+    // Check if clicking on the draggable area or any element that's not part of a shape
+    if (target.classList.contains(styles.draggableArea) || 
+        target.getAttribute('data-draggable-area') === 'true') {
       setSelectedShape(null);
     }
   };
-
-  const [isGridVisible, setIsGridVisible] = useState(false);
-  const [isLocked, setIsLocked] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [undoStack, setUndoStack] = useState<DesignState[]>([]);
-  const [redoStack, setRedoStack] = useState<DesignState[]>([]);
-  const [isFavorite, setIsFavorite] = useState(false);
 
   // Function to save current state to undo stack
   const saveToHistory = () => {
@@ -423,57 +632,88 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
     console.log('Adding to cart');
   };
 
-  // Add keyboard movement amount
-  const KEYBOARD_MOVE_AMOUNT = 5;
-
-  // Handle keyboard movement
-  const handleKeyDown = (e: React.KeyboardEvent, areaName: string, index: number) => {
-    if (!selectedShape) return;
-    
-    const [setShapes, shapes] = getShapeSetterForArea(areaName);
-    const shape = shapes[index];
-    let newX = shape.x;
-    let newY = shape.y;
-
-    switch (e.key) {
-      case 'ArrowLeft':
-        e.preventDefault();
-        newX -= KEYBOARD_MOVE_AMOUNT;
-        break;
-      case 'ArrowRight':
-        e.preventDefault();
-        newX += KEYBOARD_MOVE_AMOUNT;
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        newY -= KEYBOARD_MOVE_AMOUNT;
-        break;
-      case 'ArrowDown':
-        e.preventDefault();
-        newY += KEYBOARD_MOVE_AMOUNT;
-        break;
-    }
-
-    if (newX !== shape.x || newY !== shape.y) {
-      saveToHistory();
-      const updatedShapes = [...shapes];
-      updatedShapes[index] = { ...shape, x: newX, y: newY };
-      setShapes(updatedShapes);
-    }
-  };
-
   const renderDraggableArea = (areaName: string) => {
     const [_, shapes] = getShapeSetterForArea(areaName);
     
+    // Keep the rotation refs
+    const isRotatingRef = useRef(false);
+    const shapeCenterRef = useRef<{ x: number; y: number } | null>(null);
+    const initialRotationRef = useRef(0);
+
+    // Keep the angle calculation and rotation handling
+    const calculateAngle = (centerX: number, centerY: number, mouseX: number, mouseY: number) => {
+      const dx = mouseX - centerX;
+      const dy = mouseY - centerY;
+      const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+      return angle;
+    };
+
+    const handleRotationStart = (e: React.MouseEvent, shape: PlacedShape, index: number) => {
+      e.stopPropagation();
+      e.preventDefault();
+
+      isRotatingRef.current = true;
+
+      // Get the shape's bounding box to calculate its center
+      const shapeElement = e.currentTarget.closest('.react-draggable');
+      if (!shapeElement) return;
+
+      const rect = shapeElement.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      shapeCenterRef.current = { x: centerX, y: centerY };
+
+      // Calculate the initial angle
+      const mouseX = e.clientX;
+      const mouseY = e.clientY;
+      const initialAngle = calculateAngle(centerX, centerY, mouseX, mouseY);
+      initialRotationRef.current = shape.rotation - initialAngle;
+
+      // Add event listeners for mouse move and mouse up
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        if (!isRotatingRef.current || !shapeCenterRef.current) return;
+
+        const { x: centerX, y: centerY } = shapeCenterRef.current;
+        const mouseX = moveEvent.clientX;
+        const mouseY = moveEvent.clientY;
+
+        // Calculate the new angle
+        const angle = calculateAngle(centerX, centerY, mouseX, mouseY);
+        let newRotation = initialRotationRef.current + angle;
+
+        // Normalize the rotation to be between 0 and 360 degrees
+        newRotation = (newRotation + 360) % 360;
+        if (newRotation < 0) newRotation += 360;
+
+        // Update the shape's rotation in real-time
+        const [setShapes, shapes] = getShapeSetterForArea(areaName);
+        const updatedShapes = [...shapes];
+        updatedShapes[index] = { ...shapes[index], rotation: newRotation };
+        setShapes(updatedShapes);
+      };
+
+      const handleMouseUp = () => {
+        isRotatingRef.current = false;
+        shapeCenterRef.current = null;
+        initialRotationRef.current = 0;
+
+        // Save to history after rotation is complete
+        saveToHistory();
+
+        // Remove event listeners
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+      };
+
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    };
+    
     return (
       <Box
-        className="draggable-area"
+        className={styles.draggableArea}
+        data-draggable-area={areaName}
         onClick={handleBackgroundClick}
-        onDoubleClick={(e) => {
-          if ((e.target as HTMLElement).classList.contains('draggable-area')) {
-            setSelectedShape(null);
-          }
-        }}
         sx={{
           width: '100%',
           height: '100%',
@@ -481,7 +721,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
           overflow: 'hidden',
           ...(isGridVisible && {
             backgroundImage: 'linear-gradient(to right, #ddd 1px, transparent 1px), linear-gradient(to bottom, #ddd 1px, transparent 1px)',
-            backgroundSize: '20px 20px',
+            backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
           }),
         }}
         onDrop={(e) => handleDrop(e, areaName)}
@@ -498,90 +738,201 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
             }}
             position={{ x: shape.x, y: shape.y }}
             size={{ width: shape.width, height: shape.height }}
-            style={{ 
-              transform: `rotate(${shape.rotation}deg)`,
+            style={{
               zIndex: selectedShape === `${areaName}-${index}` ? 1000 : 1,
+              overflow: 'visible',
             }}
-            enableResizing={!isLocked}
-            draggable={!isLocked}
-            onDragStart={() => !isLocked && setSelectedShape(`${areaName}-${index}`)}
-            onDragStop={(e, d) => {
+            enableResizing={!isLocked && selectedShape === `${areaName}-${index}` && {
+              top: true,
+              right: true,
+              bottom: true,
+              left: true,
+              topRight: true,
+              bottomRight: true,
+              bottomLeft: true,
+              topLeft: true,
+            }}
+            disableDragging={isLocked}
+            bounds="parent"
+            dragGrid={[GRID_SIZE, GRID_SIZE]}
+            resizeGrid={[GRID_SIZE, GRID_SIZE]}
+            onDragStart={(e) => {
+              e.stopPropagation();
+              if (!isLocked) {
+                handleDragStart(shape, areaName);
+                setSelectedShape(`${areaName}-${index}`);
+              }
+            }}
+            onDrag={(e, d) => {
+              e.stopPropagation();
               if (isLocked) return;
-              saveToHistory();
+
+              // Update position in real-time during drag
               const [setShapes, shapes] = getShapeSetterForArea(areaName);
-              const updatedShapes = [...shapes];
-              updatedShapes[index] = { ...shape, x: d.x, y: d.y };
+              const updatedShapes = shapes.map((s, i) => 
+                i === index ? { ...s, x: d.x, y: d.y } : s
+              );
+              setShapes(updatedShapes);
+            }}
+            onDragStop={(e, d) => {
+              e.stopPropagation();
+              if (isLocked) return;
+              
+              // Snap to grid on drag stop
+              const snappedX = snapToGrid(d.x);
+              const snappedY = snapToGrid(d.y);
+              
+              const [setShapes, shapes] = getShapeSetterForArea(areaName);
+              const updatedShapes = shapes.map((s, i) => 
+                i === index ? { ...s, x: snappedX, y: snappedY } : s
+              );
+              setShapes(updatedShapes);
+              setSelectedShape(`${areaName}-${index}`);
+              saveToHistory();
+            }}
+            onResizeStart={(e) => {
+              e.stopPropagation();
+              if (!isLocked) {
+                setSelectedShape(`${areaName}-${index}`);
+              }
+            }}
+            onResize={(e, direction, ref, delta, position) => {
+              e.stopPropagation();
+              if (isLocked) return;
+
+              // Update size in real-time during resize
+              const [setShapes, shapes] = getShapeSetterForArea(areaName);
+              const updatedShapes = shapes.map((s, i) => 
+                i === index ? {
+                  ...s,
+                  width: parseInt(ref.style.width),
+                  height: parseInt(ref.style.height),
+                  x: position.x,
+                  y: position.y,
+                } : s
+              );
               setShapes(updatedShapes);
             }}
             onResizeStop={(e, direction, ref, delta, position) => {
+              e.stopPropagation();
               if (isLocked) return;
-              saveToHistory();
+              
+              // Snap size and position to grid on resize stop
+              const snappedWidth = snapToGrid(parseInt(ref.style.width));
+              const snappedHeight = snapToGrid(parseInt(ref.style.height));
+              const snappedX = snapToGrid(position.x);
+              const snappedY = snapToGrid(position.y);
+              
               const [setShapes, shapes] = getShapeSetterForArea(areaName);
-              const updatedShapes = [...shapes];
-              updatedShapes[index] = {
-                ...shape,
-                width: parseInt(ref.style.width),
-                height: parseInt(ref.style.height),
-                x: position.x,
-                y: position.y,
-              };
+              const updatedShapes = shapes.map((s, i) => 
+                i === index ? {
+                  ...s,
+                  width: snappedWidth,
+                  height: snappedHeight,
+                  x: snappedX,
+                  y: snappedY,
+                } : s
+              );
               setShapes(updatedShapes);
+              saveToHistory();
+            }}
+            resizeHandleStyles={{
+              top: { display: selectedShape === `${areaName}-${index}` ? 'block' : 'none' },
+              right: { display: selectedShape === `${areaName}-${index}` ? 'block' : 'none' },
+              bottom: { display: selectedShape === `${areaName}-${index}` ? 'block' : 'none' },
+              left: { display: selectedShape === `${areaName}-${index}` ? 'block' : 'none' },
+              topRight: { display: selectedShape === `${areaName}-${index}` ? 'block' : 'none' },
+              bottomRight: { display: selectedShape === `${areaName}-${index}` ? 'block' : 'none' },
+              bottomLeft: { display: selectedShape === `${areaName}-${index}` ? 'block' : 'none' },
+              topLeft: { display: selectedShape === `${areaName}-${index}` ? 'block' : 'none' },
             }}
           >
             <Box 
-              tabIndex={0}
-              onKeyDown={(e) => handleKeyDown(e, areaName, index)}
-              sx={{ 
-                width: '100%', 
-                height: '100%', 
-                position: 'relative',
-                cursor: isLocked ? 'default' : 'move',
-                outline: selectedShape === `${areaName}-${index}` ? '2px solid #2196f3' : 'none',
-                '&:focus': {
-                  outline: '2px solid #2196f3',
-                },
-              }}
-              onDoubleClick={(e) => {
-                e.stopPropagation();
-                if (!isLocked) {
-                  setSelectedShape(`${areaName}-${index}`);
-                }
-              }}
               onClick={(e) => {
                 e.stopPropagation();
                 if (!isLocked) {
                   setSelectedShape(`${areaName}-${index}`);
                 }
               }}
+              sx={{ 
+                width: '100%', 
+                height: '100%', 
+                position: 'relative',
+                cursor: isLocked ? 'default' : 'move',
+                transform: `rotate(${shape.rotation}deg)`,
+                transformOrigin: 'center center',
+                '&:hover': {
+                  '& > .shape-border': {
+                    borderColor: '#2196f3'
+                  }
+                }
+              }}
             >
-              {shape.render(shape.color)}
+              {selectedShape === `${areaName}-${index}` && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    border: '2px solid #2196f3',
+                    borderRadius: '2px',
+                    pointerEvents: 'none',
+                    zIndex: 10
+                  }}
+                />
+              )}
+              
+              <Box
+                className="shape-border"
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  border: '2px solid transparent',
+                  borderRadius: '2px',
+                  pointerEvents: 'none',
+                  zIndex: 5,
+                  transition: 'border-color 0.2s'
+                }}
+              />
+              
+              <Box
+                sx={{
+                  width: '100%',
+                  height: '100%',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                }}
+              >
+                {shape.render(shape.color)}
+              </Box>
               {selectedShape === `${areaName}-${index}` && !isLocked && (
                 <Box sx={{
                   position: 'absolute',
-                  top: -20,
-                  right: -20,
-                  display: 'none', // Hide by default
-                  '.selected-element:hover &, .selected-element:focus &': {
-                    display: 'flex', // Show on hover/focus
-                  },
+                  top: -30,
+                  right: -30,
+                  display: 'flex',
                   gap: 0.5,
                   bgcolor: 'white',
                   padding: '2px',
                   borderRadius: '4px',
                   boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  zIndex: 1001,
+                  transform: `rotate(${-shape.rotation}deg)`,
                 }}>
                   <IconButton
                     size="small"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      saveToHistory();
-                      const [setShapes, shapes] = getShapeSetterForArea(areaName);
-                      const updatedShapes = [...shapes];
-                      updatedShapes[index] = {
-                        ...shape,
-                        rotation: (shape.rotation + 45) % 360,
-                      };
-                      setShapes(updatedShapes);
+                    onMouseDown={(e) => handleRotationStart(e, shape, index)}
+                    sx={{
+                      cursor: 'grab',
+                      '&:active': {
+                        cursor: 'grabbing',
+                      },
                     }}
                   >
                     <RotateIcon fontSize="small" />
@@ -675,6 +1026,9 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
           <IconButton size="small" onClick={() => setIsGridVisible(!isGridVisible)}>
             <GridIcon color={isGridVisible ? 'primary' : 'inherit'} />
           </IconButton>
+          <IconButton size="small" onClick={() => setIsBordersVisible(!isBordersVisible)}>
+            <BorderIcon color={isBordersVisible ? 'primary' : 'inherit'} />
+          </IconButton>
         </Box>
 
         <Box sx={{ display: 'flex', gap: 2 }}>
@@ -705,7 +1059,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
         gridTemplateColumns: '250px 4fr 1fr',
         gridTemplateRows: '80px 1fr 80px', // Increased height for borders
         height: '70vh',
-        border: '1px solid #ccc',
+        border: '1px solid #ccc', // Always keep the outer border
         width: '150%',
         transform: 'translateX(-16.5%)',
         borderTop: 'none',
@@ -737,7 +1091,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
 
         <Box sx={{ 
           gridColumn: '2/4',
-          borderBottom: '1px solid #ccc',
+          borderBottom: isBordersVisible ? '1px solid #ccc' : 'none', // Border 1 to Body border
           p: 1.5,
           height: '80px', // Match border height
           position: 'relative',
@@ -792,8 +1146,8 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
 
         {/* Body Area */}
         <Box sx={{ 
-          borderRight: '1px solid #ccc',
-          borderBottom: '1px solid #ccc',
+          borderRight: isBordersVisible ? '1px solid #ccc' : 'none', // Body to Pallu border
+          borderBottom: isBordersVisible ? '1px solid #ccc' : 'none', // Body to Border 2 border
           p: 1.5,
           position: 'relative',
         }}>
@@ -802,7 +1156,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
 
         {/* Pallu Area */}
         <Box sx={{ 
-          borderBottom: '1px solid #ccc',
+          borderBottom: isBordersVisible ? '1px solid #ccc' : 'none', // Pallu to Border 2 border
           p: 1.5,
           position: 'relative',
         }}>
