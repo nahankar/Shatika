@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Rnd } from 'react-rnd';
 import {
   Box,
@@ -27,6 +27,7 @@ import {
   BorderOuter as BorderIcon,
 } from '@mui/icons-material';
 import styles from './DesignPage.module.css';
+import { designElementsAPI } from '../../services/api';
 
 interface DesignPageProps {
   projectId?: string;
@@ -34,8 +35,9 @@ interface DesignPageProps {
 
 interface DesignShape {
   id: string;
-  type: string;
-  category: string;
+  name: string;
+  artType: string;
+  isActive: boolean;
   render: (color: string) => React.ReactNode;
 }
 
@@ -103,169 +105,122 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
   const colorPalette = allColors[colorPage];
 
   // Design shapes with their visual representations
-  const designShapes: DesignShape[] = [
-    // General Shapes
-    {
-      id: 'circle',
-      type: 'Circle',
-      category: 'General',
-      render: (color) => (
-        <Box sx={{
-          width: '100%',
-          height: '100%',
-          borderRadius: '50%',
-          bgcolor: color,
-        }} />
-      )
-    },
-    {
-      id: 'square',
-      type: 'Square',
-      category: 'General',
-      render: (color) => (
-        <Box sx={{
-          width: '100%',
-          height: '100%',
-          bgcolor: color,
-        }} />
-      )
-    },
-    {
-      id: 'triangle',
-      type: 'Triangle',
-      category: 'General',
-      render: (color) => (
-        <Box sx={{
-          width: '100%',
-          height: '100%',
-          clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
-          bgcolor: color,
-        }} />
-      )
-    },
-    {
-      id: 'rectangle',
-      type: 'Rectangle',
-      category: 'General',
-      render: (color) => (
-        <Box sx={{
-          width: '100%',
-          height: '60%',
-          bgcolor: color,
-        }} />
-      )
-    },
-    {
-      id: 'pentagon',
-      type: 'Pentagon',
-      category: 'General',
-      render: (color) => (
-        <Box sx={{
-          width: '100%',
-          height: '100%',
-          clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)',
-          bgcolor: color,
-        }} />
-      )
-    },
-    {
-      id: 'star',
-      type: 'Star',
-      category: 'General',
-      render: (color) => (
-        <Box sx={{
-          width: '100%',
-          height: '100%',
-          clipPath: 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)',
-          bgcolor: color,
-        }} />
-      )
-    },
-    // Spiritual Symbols
-    {
-      id: 'om',
-      type: 'OM',
-      category: 'Spiritual',
-      render: (color) => (
-        <Box sx={{
-          width: '100%',
-          height: '100%',
-          bgcolor: 'transparent',
-          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='${encodeURIComponent(color)}' d='M50 5C25.2 5 5 25.2 5 50s20.2 45 45 45 45-20.2 45-45S74.8 5 50 5zm25 45c0 13.8-11.2 25-25 25s-25-11.2-25-25 11.2-25 25-25 25 11.2 25 25zm-25-15c-8.3 0-15 6.7-15 15s6.7 15 15 15 15-6.7 15-15-6.7-15-15-15z'/%3E%3C/svg%3E")`,
-          backgroundSize: 'contain',
-          backgroundRepeat: 'no-repeat',
-          backgroundPosition: 'center',
-        }} />
-      )
-    },
-    {
-      id: 'swastik',
-      type: 'Swastik',
-      category: 'Spiritual',
-      render: (color) => (
-        <Box sx={{
-          width: '100%',
-          height: '100%',
-          bgcolor: 'transparent',
-          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='${encodeURIComponent(color)}' d='M40 20H60V40H80V60H60V80H40V60H20V40H40V20z'/%3E%3C/svg%3E")`,
-          backgroundSize: 'contain',
-          backgroundRepeat: 'no-repeat',
-          backgroundPosition: 'center',
-        }} />
-      )
-    },
-    // Warli Art
-    {
-      id: 'warli-human',
-      type: 'Warli Human',
-      category: 'Warli',
-      render: (color) => (
-        <Box sx={{
-          width: '100%',
-          height: '100%',
-          bgcolor: 'transparent',
-          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle fill='${encodeURIComponent(color)}' cx='50' cy='30' r='15'/%3E%3Cline stroke='${encodeURIComponent(color)}' stroke-width='4' x1='50' y1='45' x2='50' y2='80'/%3E%3Cline stroke='${encodeURIComponent(color)}' stroke-width='4' x1='50' y1='60' x2='20' y2='40'/%3E%3Cline stroke='${encodeURIComponent(color)}' stroke-width='4' x1='50' y1='60' x2='80' y2='40'/%3E%3Cline stroke='${encodeURIComponent(color)}' stroke-width='4' x1='50' y1='80' x2='20' y2='100'/%3E%3Cline stroke='${encodeURIComponent(color)}' stroke-width='4' x1='50' y1='80' x2='80' y2='100'/%3E%3C/svg%3E")`,
-          backgroundSize: 'contain',
-          backgroundRepeat: 'no-repeat',
-          backgroundPosition: 'center',
-        }} />
-      )
-    },
-    // Kolam Art
-    {
-      id: 'kolam-basic',
-      type: 'Basic Kolam',
-      category: 'Kolam',
-      render: (color) => (
-        <Box sx={{
-          width: '100%',
-          height: '100%',
-          bgcolor: 'transparent',
-          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='${encodeURIComponent(color)}' stroke-width='2' d='M10,50 C10,30 30,10 50,10 C70,10 90,30 90,50 C90,70 70,90 50,90 C30,90 10,70 10,50 Z M30,50 C30,40 40,30 50,30 C60,30 70,40 70,50 C70,60 60,70 50,70 C40,70 30,60 30,50 Z'/%3E%3C/svg%3E")`,
-          backgroundSize: 'contain',
-          backgroundRepeat: 'no-repeat',
-          backgroundPosition: 'center',
-        }} />
-      )
-    },
-    // Mandala Art
-    {
-      id: 'mandala-simple',
-      type: 'Simple Mandala',
-      category: 'Mandala',
-      render: (color) => (
-        <Box sx={{
-          width: '100%',
-          height: '100%',
-          bgcolor: 'transparent',
-          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg fill='none' stroke='${encodeURIComponent(color)}' stroke-width='2'%3E%3Ccircle cx='50' cy='50' r='40'/%3E%3Ccircle cx='50' cy='50' r='30'/%3E%3Ccircle cx='50' cy='50' r='20'/%3E%3Cpath d='M50,10 L50,90 M10,50 L90,50 M22,22 L78,78 M22,78 L78,22'/%3E%3C/g%3E%3C/svg%3E")`,
-          backgroundSize: 'contain',
-          backgroundRepeat: 'no-repeat',
-          backgroundPosition: 'center',
-        }} />
-      )
-    },
-  ];
+  const [designShapes, setDesignShapes] = useState<DesignShape[]>([]);
+
+  // Get the API URL from environment variables
+  const API_URL = import.meta.env.VITE_API_URL;
+
+  // Helper function to get the full image URL
+  const getImageUrl = (imagePath: string) => {
+    if (!imagePath) return '';
+    if (imagePath.startsWith('http')) return imagePath;
+    return `${API_URL}${imagePath}`;
+  };
+
+  useEffect(() => {
+    fetchDesignElements();
+  }, []);
+
+  const fetchDesignElements = async () => {
+    try {
+      const response = await designElementsAPI.getAll();
+      if (response.data && response.data.success) {
+        const elements = response.data.data.map((element: any) => ({
+          id: element._id,
+          name: element.name,
+          artType: element.artType,
+          isActive: element.isActive,
+          render: (color: string) => {
+            // Use the most reliable approach for coloring SVGs
+            const imageUrl = getImageUrl(element.image);
+            return (
+              <div style={{ 
+                width: '100%', 
+                height: '100%', 
+                position: 'relative',
+                backgroundColor: color !== '#FFFFFF' ? color : '#000000',
+                WebkitMaskImage: `url(${imageUrl})`,
+                maskImage: `url(${imageUrl})`,
+                WebkitMaskSize: 'contain',
+                maskSize: 'contain',
+                WebkitMaskRepeat: 'no-repeat',
+                maskRepeat: 'no-repeat',
+                WebkitMaskPosition: 'center',
+                maskPosition: 'center',
+              }}>
+              </div>
+            );
+          }
+        }));
+        setDesignShapes(elements);
+      } else {
+        setDesignShapes([]);
+      }
+    } catch (error) {
+      console.error('Error fetching design elements:', error);
+      setDesignShapes([]);
+    }
+  };
+
+  // Add helper functions to calculate hue rotation, saturation and brightness from hex color
+  const getColorHueRotation = (hexColor: string): string => {
+    // Convert hex to RGB
+    const r = parseInt(hexColor.substring(1, 3), 16) / 255;
+    const g = parseInt(hexColor.substring(3, 5), 16) / 255;
+    const b = parseInt(hexColor.substring(5, 7), 16) / 255;
+    
+    // Calculate HSL
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let h = 0;
+    
+    if (max !== min) {
+      if (max === r) {
+        h = 60 * (0 + (g - b) / (max - min));
+      } else if (max === g) {
+        h = 60 * (2 + (b - r) / (max - min));
+      } else {
+        h = 60 * (4 + (r - g) / (max - min));
+      }
+    }
+    
+    if (h < 0) h += 360;
+    
+    return `${Math.round(h)}deg`;
+  };
+
+  const getColorSaturation = (hexColor: string): string => {
+    // Convert hex to RGB
+    const r = parseInt(hexColor.substring(1, 3), 16) / 255;
+    const g = parseInt(hexColor.substring(3, 5), 16) / 255;
+    const b = parseInt(hexColor.substring(5, 7), 16) / 255;
+    
+    // Calculate HSL
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let s = 0;
+    const l = (max + min) / 2;
+    
+    if (max !== min) {
+      s = l > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min);
+    }
+    
+    // Return higher saturation for more vibrant colors
+    return `${Math.min(Math.round(s * 1000), 1000)}%`;
+  };
+
+  const getColorBrightness = (hexColor: string): string => {
+    // Convert hex to RGB
+    const r = parseInt(hexColor.substring(1, 3), 16) / 255;
+    const g = parseInt(hexColor.substring(3, 5), 16) / 255;
+    const b = parseInt(hexColor.substring(5, 7), 16) / 255;
+    
+    // Use a relative luminance formula (simplified)
+    const brightness = (r * 0.299 + g * 0.587 + b * 0.114) * 2;
+    
+    // Return appropriate brightness based on color intensity
+    return `${Math.max(Math.min(Math.round(brightness * 100), 200), 50)}%`;
+  };
 
   const getShapeSetterForArea = (area: string): [(shapes: PlacedShape[]) => void, PlacedShape[]] => {
     switch (area) {
@@ -403,11 +358,20 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
     }
   };
 
+  // Default shape size and calculations
   const GRID_SIZE = 20; // Size of grid cells for snapping
-  const DEFAULT_SHAPE_SIZE = 40; // Default size of shapes
+  const DEFAULT_SHAPE_SIZE = 80; // Default size of shapes
 
   const snapToGrid = (value: number): number => {
     return Math.round(value / GRID_SIZE) * GRID_SIZE;
+  };
+
+  // Calculate the appropriate size for a shape based on the drop area dimensions
+  const calculateShapeSize = (areaWidth: number, areaHeight: number): number => {
+    // Use a percentage of the smaller dimension, but max out at DEFAULT_SHAPE_SIZE
+    const size = Math.min(Math.min(areaWidth, areaHeight) * 0.2, DEFAULT_SHAPE_SIZE);
+    // Ensure it's a multiple of GRID_SIZE
+    return Math.max(GRID_SIZE, snapToGrid(size));
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -430,6 +394,9 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
     const scrollX = dropTargetElement.scrollLeft;
     const scrollY = dropTargetElement.scrollTop;
 
+    // Calculate appropriate shape size for this area
+    const shapeSize = calculateShapeSize(dropTarget.width, dropTarget.height);
+
     // Calculate final position with snapping
     let x: number;
     let y: number;
@@ -441,16 +408,16 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
     } else {
       // For new shapes (initial placement)
       // Center the shape on the cursor by subtracting half the shape size
-      const halfSize = DEFAULT_SHAPE_SIZE / 2;
+      const halfSize = shapeSize / 2;
       x = Math.max(0, snapToGrid(rawX - halfSize + scrollX));
       y = Math.max(0, snapToGrid(rawY - halfSize + scrollY));
     }
 
     // Ensure the shape stays within the bounds of the drop target
-    const maxX = dropTarget.width - DEFAULT_SHAPE_SIZE;
-    const maxY = dropTarget.height - DEFAULT_SHAPE_SIZE;
-    x = Math.min(Math.max(0, x), maxX);
-    y = Math.min(Math.max(0, y), maxY);
+    const maxX = dropTarget.width - shapeSize;
+    const maxY = dropTarget.height - shapeSize;
+    x = Math.min(Math.max(0, x), maxX > 0 ? maxX : 0);
+    y = Math.min(Math.max(0, y), maxY > 0 ? maxY : 0);
 
     if (dragItemRef.current) {
       // Moving an existing shape
@@ -474,7 +441,15 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
         const [setTargetShapes, targetShapes] = getShapeSetterForArea(areaName);
         
         const newSourceShapes = sourceShapes.filter(s => s.id !== shape.id).map(s => ({...s}));
-        const movedShape = { ...shape, x, y };
+        const movedShape = { 
+          ...shape, 
+          x, 
+          y, 
+          color: selectedColor,
+          // Adjust size if needed for the new area
+          width: Math.min(shape.width, dropTarget.width - x),
+          height: Math.min(shape.height, dropTarget.height - y)
+        };
         const newTargetShapes = [...targetShapes.map(s => ({...s})), movedShape];
         
         setSourceShapes(newSourceShapes);
@@ -484,13 +459,13 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
         setSelectedShape(`${areaName}-${newIndex}`);
       }
     } else if (draggedShape) {
-      // Creating a new shape from the palette
+      // Creating a new shape from the palette - always use the current selected color
       const newShape: PlacedShape = {
         ...draggedShape,
         x,
         y,
-        width: DEFAULT_SHAPE_SIZE,
-        height: DEFAULT_SHAPE_SIZE,
+        width: shapeSize,
+        height: shapeSize,
         rotation: 0,
         color: selectedColor,
       };
@@ -955,6 +930,67 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
     );
   };
 
+  // Update the design blocks section to use fetched elements
+  const renderDesignBlocks = () => {
+    const filteredShapes = designShapes.filter(shape => 
+      shape.isActive && 
+      (searchQuery === '' || 
+        shape.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        shape.artType.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+
+    return (
+      <Box className={styles.designBlocks} sx={{ 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))',
+        gap: 1,
+        p: 1,
+      }}>
+        {filteredShapes.map((element) => (
+          <Box
+            key={element.id}
+            sx={{
+              width: '100%',
+              aspectRatio: '1/1',
+              cursor: 'grab',
+              border: selectedShape === element.id ? '2px solid #1976d2' : '1px solid #ccc',
+              borderRadius: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              '&:hover': {
+                borderColor: 'primary.main',
+              },
+            }}
+            draggable
+            onDragStart={(e) => handleDragStart(element)}
+            onClick={() => setSelectedShape(element.id)}
+          >
+            <Box sx={{ width: '80%', height: '80%' }}>
+              {element.render(selectedColor)}
+            </Box>
+          </Box>
+        ))}
+      </Box>
+    );
+  };
+
+  // Update color when a new color is selected for an existing shape
+  useEffect(() => {
+    if (selectedShape && selectedShape.includes('-')) {
+      const [area, indexStr] = selectedShape.split('-');
+      const index = parseInt(indexStr);
+      const [setShapes, shapes] = getShapeSetterForArea(area);
+      
+      if (shapes[index]) {
+        const updatedShapes = shapes.map((shape, i) => 
+          i === index ? { ...shape, color: selectedColor } : shape
+        );
+        setShapes(updatedShapes);
+      }
+    }
+  }, [selectedColor]);
+
   return (
     <Box sx={{ 
       height: '100vh', 
@@ -1078,6 +1114,8 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
             fullWidth
             size="small"
             placeholder="Search Design"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
@@ -1103,45 +1141,14 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId }) => {
         <Box sx={{ 
           borderRight: '1px solid #ccc',
           borderBottom: '1px solid #ccc',
-          p: 1.5,
+          display: 'flex',
+          flexDirection: 'column',
           overflowY: 'auto',
         }}>
-          <Typography variant="subtitle1" gutterBottom>
+          <Typography variant="subtitle1" sx={{ p: 1.5, pb: 0.5 }}>
             Design Blocks
           </Typography>
-          <Box sx={{ 
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)', // Changed to 4 columns
-            gap: 0.5,
-          }}>
-            {designShapes.map((shape) => (
-              <Box
-                key={shape.id}
-                draggable
-                onDragStart={() => handleDragStart(shape)}
-                sx={{
-                  aspectRatio: '1',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'grab',
-                  '&:active': {
-                    cursor: 'grabbing',
-                  },
-                }}
-              >
-                <Box sx={{ 
-                  width: '40px', // Kept original size
-                  height: '40px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center' 
-                }}>
-                  {shape.render(selectedColor)}
-                </Box>
-              </Box>
-            ))}
-          </Box>
+          {renderDesignBlocks()}
         </Box>
 
         {/* Body Area */}
