@@ -52,7 +52,7 @@ export const getProduct = async (req: Request, res: Response): Promise<void> => 
 // Create product
 export const createProduct = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, description, price, category, material, art } = req.body;
+    const { name, description, price, category, material, art, isActive, showInDIY } = req.body;
     let tags = [];
     
     // Parse tags if they exist
@@ -98,6 +98,8 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       art,
       tags,
       images: imageUrls,
+      isActive: isActive !== undefined ? Boolean(isActive) : true,
+      showInDIY: showInDIY !== undefined ? Boolean(showInDIY) : false,
     });
 
     // Populate category and material fields in the response
@@ -124,8 +126,8 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     console.log('Update product files:', req.files);
     console.log('Update product params:', req.params);
 
-    const { name, description, price, category, material, art } = req.body;
-    console.log('Destructured fields:', { name, description, price, category, material, art });
+    const { name, description, price, category, material, art, isActive, showInDIY } = req.body;
+    console.log('Destructured fields:', { name, description, price, category, material, art, isActive, showInDIY });
     
     let tags: string[] = [];
     let imageUrls: string[] = [];
@@ -214,6 +216,8 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
       art,
       tags,
       images: imageUrls,
+      isActive: isActive !== undefined ? Boolean(isActive) : existingProduct.isActive,
+      showInDIY: showInDIY !== undefined ? Boolean(showInDIY) : existingProduct.showInDIY,
     };
 
     console.log('Final update data:', updateData);

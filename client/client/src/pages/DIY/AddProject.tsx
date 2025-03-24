@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -11,27 +11,51 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  IconButton,
+  CircularProgress,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import { PhotoCamera } from '@mui/icons-material';
+import { projectsAPI } from '../../services/api';
 
 const AddProject = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     fabricCategory: '',
-    fabricImage: null as File | null,
+    fabricImageUrl: '',
+    selectedProductId: '',
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  useEffect(() => {
+    if (location.state) {
+      if (location.state.selectedProduct) {
+        const { selectedProduct } = location.state;
+        setFormData(prev => ({
+          ...prev,
+          fabricImageUrl: selectedProduct.images?.[0] || '',
+          selectedProductId: selectedProduct._id || '',
+        }));
+      }
+      
+      if (location.state.formData) {
+        setFormData(prev => ({
+          ...prev,
+          ...location.state.formData,
+        }));
+      }
+    }
+  }, [location.state]);
 
-  // Placeholder fabric categories
   const fabricCategories = [
-    'Cotton',
-    'Silk',
-    'Wool',
-    'Linen',
-    'Synthetic',
-    // Add more categories as needed
+    'Bags',
+    'Blouses',
+    'Sarees',
+    'Scarfs / Chunni / Dupatta',
   ];
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -49,32 +73,68 @@ const AddProject = () => {
     }));
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFormData((prev) => ({
-        ...prev,
-        fabricImage: e.target.files![0],
-      }));
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // TODO: Implement project creation logic
-    console.log('Form submitted:', formData);
-    
-    // For now, navigate to design page with a temporary ID
-    // Later, this will be replaced with the actual project ID from the backend
-    const tempProjectId = 'temp-' + Date.now();
-    navigate(`/diy/design/${tempProjectId}`, { 
-      state: { 
-        projectData: {
+  const navigateToProductSelection = () => {
+    navigate('/products?forDIY=true', {
+      state: {
+        formData: {
           name: formData.name,
           description: formData.description,
-          category: formData.fabricCategory,
+          fabricCategory: formData.fabricCategory,
         }
       }
     });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    
+    try {
+      if (!formData.fabricImageUrl || !formData.selectedProductId) {
+        setError("Please select a fabric from products.");
+        setLoading(false);
+        return;
+      }
+      
+      const projectData = new FormData();
+      projectData.append('name', formData.name);
+      projectData.append('description', formData.description);
+      projectData.append('fabricCategory', formData.fabricCategory);
+      
+      // Only append fabricImage if it's not a product-based image (for legacy support)
+      if (formData.fabricImageUrl && !formData.selectedProductId) {
+        projectData.append('fabricImage', formData.fabricImageUrl);
+      }
+      
+      // Always append the selectedProductId if available
+      if (formData.selectedProductId) {
+        projectData.append('selectedProductId', formData.selectedProductId);
+        console.log('Sending selectedProductId:', formData.selectedProductId);
+      }
+      
+      const response = await projectsAPI.create(projectData);
+      
+      if (response.data && response.data.success) {
+        const projectId = response.data.data._id;
+        navigate(`/diy/design/${projectId}`, { 
+          state: { 
+            projectData: response.data.data
+          }
+        });
+      } else {
+        setError('Failed to create project. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error creating project:', error);
+      setError('An error occurred while creating the project.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCloseError = () => {
+    setError(null);
   };
 
   return (
@@ -128,34 +188,24 @@ const AddProject = () => {
             </Grid>
 
             <Grid item xs={12}>
-              <input
-                accept="image/*"
-                style={{ display: 'none' }}
-                id="fabric-image-upload"
-                type="file"
-                onChange={handleImageChange}
-              />
-              <label htmlFor="fabric-image-upload">
-                <Button
-                  variant="outlined"
-                  component="span"
-                  startIcon={<PhotoCamera />}
-                  fullWidth
-                >
-                  Select Actual Pic of Plain Fabric
-                </Button>
-              </label>
+              <Button
+                variant="outlined"
+                onClick={navigateToProductSelection}
+                fullWidth
+              >
+                Select Fabric from Products
+              </Button>
             </Grid>
 
-            {formData.fabricImage && (
+            {formData.fabricImageUrl && (
               <Grid item xs={12}>
                 <Box sx={{ mt: 2 }}>
                   <Typography variant="subtitle1" gutterBottom>
-                    Selected Fabric Image:
+                    Selected Fabric:
                   </Typography>
                   <Box
                     component="img"
-                    src={URL.createObjectURL(formData.fabricImage)}
+                    src={formData.fabricImageUrl}
                     alt="Selected fabric"
                     sx={{
                       maxWidth: '100%',
@@ -174,13 +224,21 @@ const AddProject = () => {
                 size="large"
                 fullWidth
                 type="submit"
+                disabled={loading || !formData.fabricImageUrl}
+                startIcon={loading ? <CircularProgress size={24} color="inherit" /> : null}
               >
-                Start Designing
+                {loading ? 'Saving...' : 'Start Designing'}
               </Button>
             </Grid>
           </Grid>
         </form>
       </Paper>
+      
+      <Snackbar open={!!error} autoHideDuration={6000} onClose={handleCloseError}>
+        <Alert onClose={handleCloseError} severity="error">
+          {error}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

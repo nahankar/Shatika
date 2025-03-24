@@ -7,7 +7,9 @@ import {
   Box,
   CircularProgress,
   Alert,
+  Button,
 } from '@mui/material';
+import { useNavigate, useLocation } from 'react-router-dom';
 import ProductCard from '../ProductCard/ProductCard';
 import { RootState, useAppDispatch } from '../../redux/store';
 import { fetchProducts } from '../../redux/slices/productsSlice';
@@ -17,6 +19,7 @@ import { Product } from '../../types/product';
 
 interface ProductListProps {
   category?: string;
+  forDIY?: boolean;
 }
 
 interface ProductsState {
@@ -31,12 +34,35 @@ const selectFilteredItems = (state: RootState) => (state.products as ProductsSta
 const selectLoading = (state: RootState) => (state.products as ProductsState).loading || false;
 const selectError = (state: RootState) => (state.products as ProductsState).error || null;
 
-const ProductList = ({ category }: ProductListProps) => {
+const ProductList = ({ category, forDIY = false }: ProductListProps) => {
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
+  const location = useLocation();
   const isAuthenticated = useSelector(selectIsAuthenticated);
   const filteredItems = useSelector(selectFilteredItems);
   const loading = useSelector(selectLoading);
   const error = useSelector(selectError);
+
+  // Filter products for DIY if needed
+  const displayItems = forDIY 
+    ? filteredItems.filter(item => item.showInDIY === true && item.isActive !== false)
+    : filteredItems;
+
+  const handleProductSelect = (product: Product) => {
+    if (forDIY) {
+      // Preserve the formData from the navigation state when returning
+      const existingFormData = location.state?.formData || {};
+
+      navigate('/diy/add', { 
+        state: { 
+          selectedProduct: product,
+          formData: existingFormData
+        } 
+      });
+    } else {
+      navigate(`/products/${product._id}`);
+    }
+  };
 
   useEffect(() => {
     dispatch(fetchProducts());
@@ -64,24 +90,41 @@ const ProductList = ({ category }: ProductListProps) => {
     );
   }
 
-  if (!Array.isArray(filteredItems) || filteredItems.length === 0) {
+  if (!Array.isArray(displayItems) || displayItems.length === 0) {
     return (
       <Box sx={{ py: 8, textAlign: 'center' }}>
         <Typography variant="h5" color="text.secondary">
           No products found
         </Typography>
         <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
-          Try adjusting your filters or check back later
+          {forDIY 
+            ? "No fabrics are available for DIY projects at the moment."
+            : "Try adjusting your filters or check back later"
+          }
         </Typography>
+        {forDIY && (
+          <Button 
+            variant="contained" 
+            color="primary" 
+            sx={{ mt: 3 }}
+            onClick={() => navigate('/diy/add')}
+          >
+            Go Back
+          </Button>
+        )}
       </Box>
     );
   }
 
   return (
     <Grid container spacing={4}>
-      {filteredItems.map((product: Product) => (
+      {displayItems.map((product: Product) => (
         <Grid item key={product._id} xs={12} sm={6} md={4} lg={3}>
-          <ProductCard product={product} />
+          <ProductCard 
+            product={product} 
+            forDIY={forDIY}
+            onSelect={() => handleProductSelect(product)}
+          />
         </Grid>
       ))}
     </Grid>

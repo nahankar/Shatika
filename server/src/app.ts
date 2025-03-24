@@ -16,6 +16,8 @@ import homeSectionRoutes from './routes/homeSectionRoutes';
 import favoriteRoutes from './routes/favoriteRoutes';
 import cartRoutes from './routes/cartRoutes';
 import authRoutes from './routes/auth';
+import designElementsRouter from './routes/designElements';
+import projectRoutes from './routes/projectRoutes';
 
 const app = express();
 
@@ -32,7 +34,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
 // Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../uploads');
+const uploadsDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -50,12 +52,13 @@ app.use('/api/arts', artRoutes);
 app.use('/api/home-sections', homeSectionRoutes);
 app.use('/api/favorites', favoriteRoutes);
 app.use('/api/cart', cartRoutes);
+app.use('/api/design-elements', designElementsRouter);
+app.use('/api/projects', projectRoutes);
 
-// Error handling middleware
 // Admin dashboard routes
 app.use('/api/v1/admin/dashboard', protect, restrictTo('admin'));
 
-// Error handling middleware
+// Error handling middleware (single instance)
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Error:', err);
 

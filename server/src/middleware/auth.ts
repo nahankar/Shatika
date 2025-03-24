@@ -66,4 +66,6 @@ export const restrictTo = (...roles: string[]) => {
     }
     next();
   };
-}; 
+};
+
+export const isAdmin = [protect, restrictTo('admin')]; 

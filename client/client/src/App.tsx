@@ -30,7 +30,8 @@ import AdminRoute from './components/AdminRoute/AdminRoute';
 import PrivateRoute from './components/PrivateRoute/PrivateRoute';
 import DIYPage from './pages/DIY';
 import AddProject from './pages/DIY/AddProject';
-import DesignPage from './pages/DIY/DesignPage';
+import DesignPageWrapper from './pages/DIY/DesignPageWrapper';
+import DesignElements from './pages/DesignElements/DesignElements';
 
 function App() {
   const dispatch = useAppDispatch();
@@ -128,7 +129,7 @@ function App() {
               path="/diy/design/:projectId?"
               element={
                 <PrivateRoute>
-                  <DesignPage />
+                  <DesignPageWrapper />
                 </PrivateRoute>
               }
             />
@@ -173,6 +174,7 @@ function App() {
                 <Route path="arts/*" element={<ArtsManagement />} />
                 <Route path="categories/*" element={<CategoriesManagement />} />
                 <Route path="materials/*" element={<MaterialsManagement />} />
+                <Route path="design-elements" element={<DesignElements />} />
               </Route>
               <Route path="users/*" element={<UsersManagement />} />
               <Route path="home-sections/*" element={<HomeSectionsManagement />} />

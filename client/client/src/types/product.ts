@@ -26,6 +26,8 @@ export interface Product {
   updatedAt?: string;
   variants?: ProductVariant[];
   specifications?: ProductSpecifications;
+  isActive?: boolean;
+  showInDIY?: boolean;
 }
 
 export interface CartItem {

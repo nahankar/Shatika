@@ -10,6 +10,7 @@ import {
   Box,
   CardActionArea,
   CircularProgress,
+  Button,
 } from '@mui/material';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
@@ -21,11 +22,13 @@ import ShareMenu from '../ShareMenu/ShareMenu';
 
 interface ProductCardProps {
   product: Product;
+  forDIY?: boolean;
+  onSelect?: () => void;
 }
 
 const DEFAULT_IMAGE = '/placeholder.jpg'; // Add a placeholder image to your public folder
 
-const ProductCard = ({ product }: ProductCardProps) => {
+const ProductCard = ({ product, forDIY = false, onSelect }: ProductCardProps) => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const isAuthenticated = useSelector(selectIsAuthenticated);
@@ -52,7 +55,11 @@ const ProductCard = ({ product }: ProductCardProps) => {
   };
 
   const handleClick = () => {
-    navigate(`/products/${product._id}`);
+    if (onSelect) {
+      onSelect();
+    } else {
+      navigate(`/products/${product._id}`);
+    }
   };
 
   return (
@@ -70,27 +77,29 @@ const ProductCard = ({ product }: ProductCardProps) => {
       }}
     >
       <Box sx={{ position: 'relative' }}>
-        <ShareMenu product={product} />
-        <IconButton
-          sx={{
-            position: 'absolute',
-            top: 8,
-            right: 8,
-            bgcolor: 'background.paper',
-            '&:hover': { bgcolor: 'background.paper' },
-            zIndex: 1,
-          }}
-          onClick={handleFavoriteClick}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <CircularProgress size={20} />
-          ) : isFavorite ? (
-            <FavoriteIcon color="error" />
-          ) : (
-            <FavoriteBorderIcon />
-          )}
-        </IconButton>
+        {!forDIY && <ShareMenu product={product} />}
+        {!forDIY && (
+          <IconButton
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              bgcolor: 'background.paper',
+              '&:hover': { bgcolor: 'background.paper' },
+              zIndex: 1,
+            }}
+            onClick={handleFavoriteClick}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <CircularProgress size={20} />
+            ) : isFavorite ? (
+              <FavoriteIcon color="error" />
+            ) : (
+              <FavoriteBorderIcon />
+            )}
+          </IconButton>
+        )}
         <CardActionArea onClick={handleClick}>
           <CardMedia
             component="img"
@@ -126,6 +135,17 @@ const ProductCard = ({ product }: ProductCardProps) => {
                   : product.category}
               </Typography>
             </Box>
+            {forDIY && (
+              <Button 
+                variant="contained" 
+                color="primary" 
+                fullWidth 
+                sx={{ mt: 2 }}
+                onClick={handleClick}
+              >
+                Select This Fabric
+              </Button>
+            )}
           </CardContent>
         </CardActionArea>
       </Box>

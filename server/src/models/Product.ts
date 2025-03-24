@@ -10,6 +10,8 @@ export interface IProduct extends Document {
   tags: string[];
   images: string[];
   stock: number;
+  isActive: boolean;
+  showInDIY: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -57,6 +59,16 @@ const productSchema = new Schema<IProduct>(
       type: Number,
       default: 0,
       min: [0, 'Stock cannot be negative'],
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+      description: 'Determines if the product is visible to users',
+    },
+    showInDIY: {
+      type: Boolean,
+      default: false,
+      description: 'Determines if the product appears in DIY projects',
     },
   },
   {

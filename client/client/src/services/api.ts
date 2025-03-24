@@ -306,4 +306,29 @@ export const homeSectionsAPI = {
   delete: (id: string) => axiosInstance.delete(`/home-sections/${id}`),
 };
 
+export const designElementsAPI = {
+  getAll: () => axiosInstance.get('/design-elements'),
+  getById: (id: string) => axiosInstance.get(`/design-elements/${id}`),
+  create: (data: FormData) => axiosInstance.post('/design-elements', data, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  update: (id: string, data: FormData) => axiosInstance.put(`/design-elements/${id}`, data, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  delete: (id: string) => axiosInstance.delete(`/design-elements/${id}`),
+  toggleStatus: (id: string, isActive: boolean) => axiosInstance.patch(`/design-elements/${id}/toggle`, { isActive })
+};
+
+export const projectsAPI = {
+  getAll: () => axiosInstance.get('/projects'),
+  getById: (id: string) => axiosInstance.get(`/projects/${id}`),
+  create: (data: FormData) => axiosInstance.post('/projects', data, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  update: (id: string, data: FormData) => axiosInstance.put(`/projects/${id}`, data, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  delete: (id: string) => axiosInstance.delete(`/projects/${id}`),
+};
+
 export default axiosInstance;

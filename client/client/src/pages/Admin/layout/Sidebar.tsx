@@ -23,6 +23,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
+import ExtensionIcon from '@mui/icons-material/Extension';
 
 const drawerWidth = 240;
 const navbarHeight = 64;
@@ -45,6 +46,7 @@ const Sidebar: React.FC = () => {
         { text: 'Arts', icon: <PaletteIcon />, path: '/admin/catalog/arts' },
         { text: 'Categories', icon: <CategoryIcon />, path: '/admin/catalog/categories' },
         { text: 'Materials', icon: <ColorLensIcon />, path: '/admin/catalog/materials' },
+        { text: 'Design Elements', icon: <ExtensionIcon />, path: '/admin/catalog/design-elements' },
       ]
     },
     { text: 'Users', icon: <PeopleIcon />, path: '/admin/users' },

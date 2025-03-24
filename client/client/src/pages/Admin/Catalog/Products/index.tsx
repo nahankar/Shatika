@@ -19,6 +19,9 @@ import {
   Grid,
   MenuItem,
   CircularProgress,
+  Switch,
+  FormControlLabel,
+  Tooltip,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
@@ -42,6 +45,8 @@ interface Product {
     name: string;
   };
   images: string[];
+  isActive: boolean;
+  showInDIY: boolean;
 }
 
 interface Category {
@@ -75,6 +80,8 @@ const ProductsManagement: React.FC = () => {
     category: '',
     material: '',
     art: '',
+    isActive: true,
+    showInDIY: false,
   });
   const [images, setImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
@@ -148,6 +155,8 @@ const ProductsManagement: React.FC = () => {
         category: product.category?._id || '',
         material: product.material?._id || '',
         art: product.art?._id || '',
+        isActive: product.isActive !== undefined ? product.isActive : true,
+        showInDIY: product.showInDIY !== undefined ? product.showInDIY : false,
       });
       setImagePreviews(product.images);
     } else {
@@ -159,6 +168,8 @@ const ProductsManagement: React.FC = () => {
         category: '',
         material: '',
         art: '',
+        isActive: true,
+        showInDIY: false,
       });
       setImagePreviews([]);
     }
@@ -176,13 +187,15 @@ const ProductsManagement: React.FC = () => {
       category: '',
       material: '',
       art: '',
+      isActive: true,
+      showInDIY: false,
     });
     setImages([]);
     setImagePreviews([]);
   };
 
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | { target: { name: string; value: string } }
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | { target: { name: string; value: string | boolean } }
   ) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -245,6 +258,8 @@ const ProductsManagement: React.FC = () => {
       formDataToSend.append('category', formData.category);
       formDataToSend.append('material', formData.material);
       formDataToSend.append('art', formData.art);
+      formDataToSend.append('isActive', String(formData.isActive));
+      formDataToSend.append('showInDIY', String(formData.showInDIY));
 
       // Add new images if any
       images.forEach(image => {
@@ -263,6 +278,8 @@ const ProductsManagement: React.FC = () => {
         category: formData.category,
         material: formData.material,
         art: formData.art,
+        isActive: formData.isActive,
+        showInDIY: formData.showInDIY,
         newImages: images.length,
         existingImages: editingProduct?.images?.length || 0
       });
@@ -316,6 +333,54 @@ const ProductsManagement: React.FC = () => {
     }
   };
 
+  // Function to handle toggle state changes directly from the table
+  const handleToggleStatus = async (id: string, field: 'isActive' | 'showInDIY', value: boolean) => {
+    try {
+      // Find the product to update
+      const productToUpdate = products.find(p => p._id === id);
+      if (!productToUpdate) return;
+
+      // Create a FormData object with the minimal data needed for update
+      const formDataToSend = new FormData();
+      formDataToSend.append('name', productToUpdate.name);
+      formDataToSend.append('description', productToUpdate.description);
+      formDataToSend.append('price', productToUpdate.price.toString());
+      formDataToSend.append('category', productToUpdate.category._id);
+      formDataToSend.append('material', productToUpdate.material._id);
+      formDataToSend.append('art', productToUpdate.art._id);
+      
+      // Add existing images if any
+      if (productToUpdate.images && productToUpdate.images.length > 0) {
+        formDataToSend.append('existingImages', JSON.stringify(productToUpdate.images));
+      }
+
+      // Set the value we're updating
+      if (field === 'isActive') {
+        formDataToSend.append('isActive', String(value));
+        formDataToSend.append('showInDIY', String(productToUpdate.showInDIY));
+      } else {
+        formDataToSend.append('showInDIY', String(value));
+        formDataToSend.append('isActive', String(productToUpdate.isActive));
+      }
+
+      // Update the product
+      const response = await productsAPI.update(id, formDataToSend);
+
+      if (response.data.success) {
+        // Update the local state to reflect the change
+        setProducts(products.map(p => 
+          p._id === id ? { ...p, [field]: value } : p
+        ));
+        enqueueSnackbar(`Product ${field === 'isActive' ? 'status' : 'DIY visibility'} updated`, { variant: 'success' });
+      } else {
+        enqueueSnackbar(response.data.message || 'Failed to update product', { variant: 'error' });
+      }
+    } catch (error) {
+      console.error('Error updating product:', error);
+      enqueueSnackbar('Error updating product', { variant: 'error' });
+    }
+  };
+
   return (
     <Box p={3}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
@@ -345,6 +410,8 @@ const ProductsManagement: React.FC = () => {
               <TableCell>Category</TableCell>
               <TableCell>Material</TableCell>
               <TableCell>Art</TableCell>
+              <TableCell align="center">Active</TableCell>
+              <TableCell align="center">Show in DIY</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -357,6 +424,24 @@ const ProductsManagement: React.FC = () => {
                 <TableCell>{product.category?.name || 'N/A'}</TableCell>
                 <TableCell>{product.material?.name || 'N/A'}</TableCell>
                 <TableCell>{product.art?.name || 'N/A'}</TableCell>
+                <TableCell align="center">
+                  <Tooltip title={product.isActive ? "Active - Visible to users" : "Inactive - Hidden from users"}>
+                    <Switch
+                      checked={product.isActive !== undefined ? product.isActive : true}
+                      onChange={(e) => handleToggleStatus(product._id, 'isActive', e.target.checked)}
+                      color="primary"
+                    />
+                  </Tooltip>
+                </TableCell>
+                <TableCell align="center">
+                  <Tooltip title={product.showInDIY ? "Shown in DIY projects" : "Hidden from DIY projects"}>
+                    <Switch
+                      checked={product.showInDIY !== undefined ? product.showInDIY : false}
+                      onChange={(e) => handleToggleStatus(product._id, 'showInDIY', e.target.checked)}
+                      color="secondary"
+                    />
+                  </Tooltip>
+                </TableCell>
                 <TableCell align="right">
                   <IconButton onClick={() => handleOpenDialog(product)} color="primary">
                     <EditIcon />
@@ -460,6 +545,36 @@ const ProductsManagement: React.FC = () => {
                   </MenuItem>
                 ))}
               </TextField>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    name="isActive"
+                    checked={formData.isActive}
+                    onChange={(e) => handleInputChange({
+                      target: { name: 'isActive', value: e.target.checked }
+                    })}
+                    color="primary"
+                  />
+                }
+                label="Active (Visible to users)"
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    name="showInDIY"
+                    checked={formData.showInDIY}
+                    onChange={(e) => handleInputChange({
+                      target: { name: 'showInDIY', value: e.target.checked }
+                    })}
+                    color="secondary"
+                  />
+                }
+                label="Show in DIY Projects"
+              />
             </Grid>
             <Grid item xs={12}>
               <input
