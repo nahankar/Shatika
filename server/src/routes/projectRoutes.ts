@@ -7,7 +7,6 @@ import {
   deleteProject
 } from '../controllers/projectController';
 import { protect } from '../middleware/authMiddleware';
-import { upload } from '../utils/fileStorage';
 
 const router = express.Router();
 
@@ -16,8 +15,8 @@ router.get('/', getProjects);
 router.get('/:id', getProject);
 
 // Protected routes
-router.post('/', protect, upload.single('fabricImage'), createProject);
-router.put('/:id', protect, upload.single('fabricImage'), updateProject);
+router.post('/', protect, createProject);
+router.patch('/:id', protect, updateProject);
 router.delete('/:id', protect, deleteProject);
 
 export default router; 

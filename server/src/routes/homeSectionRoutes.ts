@@ -1,6 +1,5 @@
 import express from 'express';
 import { protect, restrictTo } from '../middleware/authMiddleware';
-import { upload } from '../utils/fileStorage';
 import {
   getHomeSections,
   createHomeSection,
@@ -15,8 +14,8 @@ router.get('/', getHomeSections);
 router.use(protect);
 router.use(restrictTo('admin'));
 
-router.post('/', upload.single('image'), createHomeSection);
-router.patch('/:id', upload.single('image'), updateHomeSection);
+router.post('/', createHomeSection);
+router.patch('/:id', updateHomeSection);
 router.delete('/:id', deleteHomeSection);
 
 export default router; 
