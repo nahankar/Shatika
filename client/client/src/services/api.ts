@@ -325,7 +325,7 @@ export const projectsAPI = {
   create: (data: FormData) => axiosInstance.post('/projects', data, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
-  update: (id: string, data: FormData) => axiosInstance.put(`/projects/${id}`, data, {
+  update: (id: string, data: FormData) => axiosInstance.patch(`/projects/${id}`, data, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
   delete: (id: string) => axiosInstance.delete(`/projects/${id}`),
