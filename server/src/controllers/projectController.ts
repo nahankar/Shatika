@@ -41,7 +41,7 @@ export const getProject = asyncHandler(async (req: Request, res: Response) => {
 // @access  Private
 export const createProject = async (req: Request, res: Response) => {
   try {
-    const { name, description, fabricCategory, selectedProductId } = req.body;
+    const { name, description, fabricCategory, selectedProductId, materialId, materialName } = req.body;
     
     // Handle file upload if present
     let fabricImage = '';
@@ -55,6 +55,8 @@ export const createProject = async (req: Request, res: Response) => {
       name,
       description,
       fabricCategory,
+      materialId,
+      materialName,
       fabricImage,
       user: req.user._id,
       selectedProductId: selectedProductId || null,
@@ -120,8 +122,11 @@ export const updateProject = asyncHandler(async (req: Request, res: Response) =>
       name: req.body.name,
       description: req.body.description,
       fabricCategory: req.body.fabricCategory,
+      materialId: req.body.materialId || project.materialId,
+      materialName: req.body.materialName || project.materialName,
       fabricImage,
       designData: req.body.designData || project.designData, // Keep existing designData if not provided
+      selectedProductId: req.body.selectedProductId || project.selectedProductId,
     },
     { new: true, runValidators: true }
   );

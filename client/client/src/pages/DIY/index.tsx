@@ -31,7 +31,7 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
 } from '@mui/icons-material';
-import { projectsAPI } from '../../services/api';
+import { projectsAPI, categoriesAPI } from '../../services/api';
 
 // Define interface for project data
 interface Project {
@@ -39,9 +39,17 @@ interface Project {
   name: string;
   description: string;
   fabricCategory: string;
+  materialName?: string;
+  materialId?: string;
   fabricImage?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// Define interface for category data
+interface Category {
+  _id: string;
+  name: string;
 }
 
 const DIYPage = () => {
@@ -50,6 +58,7 @@ const DIYPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [projects, setProjects] = useState<Project[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -67,10 +76,39 @@ const DIYPage = () => {
     return `${getApiUrl()}${path}`;
   };
 
-  // Fetch projects on component mount
+  // Function to get category name by ID
+  const getCategoryNameById = (id: string): string => {
+    if (!id) return '';
+    
+    // Check if it's a valid MongoDB ObjectId format
+    const isMongoId = /^[0-9a-fA-F]{24}$/.test(id);
+    if (!isMongoId) {
+      // If it's not an ID format, return it as is (it might be a name already)
+      return id;
+    }
+    
+    // Find the category with matching ID
+    const category = categories.find(cat => cat._id === id);
+    return category ? category.name : id; // Return ID as fallback if category not found
+  };
+
+  // Fetch projects and categories on component mount
   useEffect(() => {
+    fetchCategories();
     fetchProjects();
   }, [sortBy]);
+
+  // Function to fetch categories
+  const fetchCategories = async () => {
+    try {
+      const response = await categoriesAPI.getAll();
+      if (response.data && response.data.success) {
+        setCategories(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
 
   // Function to fetch projects
   const fetchProjects = async () => {
@@ -151,12 +189,13 @@ const DIYPage = () => {
     }
   };
 
-  // Filter projects based on search query
-  const filteredProjects = projects.filter(project => 
-    project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    project.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    project.fabricCategory.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter projects based on search query - update to use category name for searching
+  const filteredProjects = projects.filter(project => {
+    const categoryName = getCategoryNameById(project.fabricCategory);
+    return project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      categoryName.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   return (
     <Box sx={{ p: 3 }}>
@@ -165,20 +204,12 @@ const DIYPage = () => {
         <Typography variant="h4" gutterBottom>
           DIY Projects
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleAddProject}
-          sx={{ mb: 2 }}
-        >
-          Add Project
-        </Button>
       </Box>
 
       {/* Search and Filter Section */}
-      <Box sx={{ mb: 4 }}>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={4}>
+      <Box sx={{ mb: 4, width: '100%' }}>
+        <Grid container spacing={2} alignItems="center" sx={{ width: '100%' }}>
+          <Grid item xs={12} md={5}>
             <TextField
               fullWidth
               placeholder="Search projects..."
@@ -187,10 +218,12 @@ const DIYPage = () => {
               InputProps={{
                 startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
               }}
+              size="medium"
+              sx={{ height: '100%' }}
             />
           </Grid>
-          <Grid item xs={12} md={4}>
-            <FormControl fullWidth>
+          <Grid item xs={12} md={3}>
+            <FormControl fullWidth size="medium">
               <InputLabel>Sort by</InputLabel>
               <Select
                 value={sortBy}
@@ -203,18 +236,34 @@ const DIYPage = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={4}>
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Grid item xs={12} md={2}>
+            <Button
+              fullWidth
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleAddProject}
+              size="large"
+              sx={{ 
+                height: '56px', // Match height of MUI TextField/Select
+                textTransform: 'none'
+              }}
+            >
+              Add Project
+            </Button>
+          </Grid>
+          <Grid item xs={12} md={2}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', height: '56px' }}>
               <ToggleButtonGroup
                 value={viewMode}
                 exclusive
                 onChange={handleViewModeChange}
                 aria-label="view mode"
+                sx={{ height: '100%' }}
               >
-                <ToggleButton value="list" aria-label="list view">
+                <ToggleButton value="list" aria-label="list view" sx={{ height: '100%' }}>
                   <ViewListIcon />
                 </ToggleButton>
-                <ToggleButton value="grid" aria-label="grid view">
+                <ToggleButton value="grid" aria-label="grid view" sx={{ height: '100%' }}>
                   <ViewModuleIcon />
                 </ToggleButton>
               </ToggleButtonGroup>
@@ -247,20 +296,63 @@ const DIYPage = () => {
           ) : (
             <Grid container spacing={3}>
               {filteredProjects.map((project) => (
-                <Grid item key={project._id} xs={12} sm={viewMode === 'grid' ? 6 : 12} md={viewMode === 'grid' ? 4 : 12}>
-                  <Card>
+                <Grid 
+                  item 
+                  key={project._id} 
+                  xs={12} 
+                  sm={6} 
+                  md={4} 
+                  lg={3}
+                  sx={{ 
+                    display: 'flex',
+                    height: '100%'
+                  }}
+                >
+                  <Card sx={{ 
+                    height: '100%', 
+                    width: '100%',
+                    minWidth: '220px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    position: 'relative',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 4px 8px rgba(0,0,0,0.15)'
+                    }
+                  }}>
                     {project.fabricImage && viewMode === 'grid' && (
                       <CardMedia
                         component="img"
-                        height="140"
+                        height={viewMode === 'grid' ? '160px' : '200px'}
                         image={getImageUrl(project.fabricImage)}
                         alt={project.name}
-                        sx={{ objectFit: 'cover' }}
+                        sx={{ width: '100%', objectFit: 'cover' }}
                       />
                     )}
-                    <CardContent>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <Typography variant="h6" component="div">
+                    <CardContent sx={{ 
+                      flexGrow: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      p: 2,
+                      pb: 1,
+                      height: viewMode === 'grid' ? '140px' : 'auto',
+                      overflow: 'hidden',
+                      width: '100%'
+                    }}>
+                      <Box sx={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'flex-start',
+                        width: '100%'
+                      }}>
+                        <Typography variant="h6" component="div" sx={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          maxWidth: 'calc(100% - 40px)'
+                        }}>
                           {project.name}
                         </Typography>
                         <IconButton size="small" onClick={(e) => handleMenuOpen(e, project._id)}>
@@ -268,13 +360,43 @@ const DIYPage = () => {
                         </IconButton>
                       </Box>
                       
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ 
+                        mt: 1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        height: '40px',
+                        width: '100%'
+                      }}>
                         {project.description}
                       </Typography>
                       
-                      <Typography variant="body2" color="primary" sx={{ mt: 1 }}>
-                        Category: {project.fabricCategory}
-                      </Typography>
+                      <Box sx={{ 
+                        mt: 'auto',
+                        width: '100%'
+                      }}>
+                        <Typography variant="body2" color="primary" sx={{ 
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          width: '100%'
+                        }}>
+                          Category: {getCategoryNameById(project.fabricCategory)}
+                        </Typography>
+
+                        {project.materialName && (
+                          <Typography variant="body2" color="primary" sx={{ 
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            width: '100%'
+                          }}>
+                            Material: {project.materialName}
+                          </Typography>
+                        )}
+                      </Box>
                       
                       {project.fabricImage && viewMode === 'list' && (
                         <Box sx={{ mt: 2 }}>
@@ -286,7 +408,11 @@ const DIYPage = () => {
                         </Box>
                       )}
                     </CardContent>
-                    <CardActions>
+                    <CardActions sx={{ 
+                      width: '100%',
+                      padding: '8px 16px',
+                      borderTop: '1px solid rgba(0, 0, 0, 0.08)'
+                    }}>
                       <Button size="small" onClick={() => handleEditProject(project._id)}>
                         Edit Design
                       </Button>

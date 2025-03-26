@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Rnd } from 'react-rnd';
 import {
   Box,
@@ -16,6 +16,10 @@ import {
   DialogContentText,
   DialogTitle,
   Button,
+  CircularProgress,
+  Select,
+  FormControl,
+  InputLabel,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -38,7 +42,13 @@ import {
   Close as CloseIcon,
 } from '@mui/icons-material';
 import styles from './DesignPage.module.css';
-import { designElementsAPI, projectsAPI, productsAPI } from '../../services/api';
+import { designElementsAPI, projectsAPI, productsAPI, materialsAPI, categoriesAPI } from '../../services/api';
+import { SelectChangeEvent } from '@mui/material/Select';
+
+interface Material {
+  _id: string;
+  name: string;
+}
 
 interface ProductThumbnail {
   _id: string;
@@ -46,11 +56,12 @@ interface ProductThumbnail {
   images: string[];
   description?: string;
   price?: number;
-  category?: string;
-  material?: string;
+  category?: { _id: string; name: string } | string;
+  material?: { _id: string; name: string } | string;
   materialType?: string;
-  materials?: Array<{name: string} | string>;
+  materials?: Array<{ _id: string; name: string } | string>;
   materialInfo?: string;
+  showInDIY?: boolean;
 }
 
 interface DesignPageProps {
@@ -120,6 +131,9 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
   const [redoStack, setRedoStack] = useState<DesignState[]>([]);
   const [isFavorite, setIsFavorite] = useState(false);
   const dragItemRef = useRef<DragItem | null>(null);
+
+  // Add state for selected material ID
+  const [selectedMaterialId, setSelectedMaterialId] = useState<string>('');
 
   // Separate placed shapes for each area - keep only Body
   const [bodyShapes, setBodyShapes] = useState<PlacedShape[]>([]);
@@ -217,114 +231,264 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
   // Add a state variable to track whether we need to restore a design later
   const [pendingDesignData, setPendingDesignData] = useState<string | null>(null);
 
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [loadingMaterials, setLoadingMaterials] = useState(false);
+
+  // Add state for categories
+  const [categories, setCategories] = useState<Array<{_id: string; name: string}>>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+
+  // Add a function to fetch categories
+  const fetchCategories = async () => {
+    try {
+      setLoadingCategories(true);
+      console.log("Fetching categories...");
+      const response = await categoriesAPI.getAll();
+      if (response.data && response.data.success) {
+        console.log("Categories fetched successfully:", response.data.data);
+        setCategories(response.data.data);
+      } else {
+        console.log("Failed to fetch categories:", response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
+
+  // Add useEffect to fetch materials and categories
+  useEffect(() => {
+    fetchMaterials();
+    fetchCategories();
+  }, []);
+
+  const fetchMaterials = async () => {
+    try {
+      setLoadingMaterials(true);
+      console.log("Fetching materials...");
+      const response = await materialsAPI.getAll();
+      if (response.data && response.data.success) {
+        console.log("Materials fetched successfully:", response.data.data);
+        // Log full details of materials for debugging
+        console.log("FULL MATERIALS LIST:", JSON.stringify(response.data.data, null, 2));
+        setMaterials(response.data.data);
+      } else {
+        console.log("Failed to fetch materials:", response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching materials:', error);
+    } finally {
+      setLoadingMaterials(false);
+    }
+  };
+
+  // Add useEffect to log whenever fabricCategory changes
+  useEffect(() => {
+    console.log("Fabric category changed to:", fabricCategory);
+    console.log("Available materials:", materials);
+    
+    // Check if the current fabricCategory is in the materials list
+    const materialInList = materials.some(m => m.name === fabricCategory);
+    console.log("Is fabricCategory in materials list?", materialInList);
+    
+    // Log each material in the list for debugging
+    console.log("Materials list contents:");
+    materials.forEach(m => {
+      console.log(`Material: ${m.name}, ID: ${m._id}`);
+    });
+    
+    // Check for common material names
+    if (fabricCategory === "Khadi Cotton") {
+      console.log("Fabric category is 'Khadi Cotton'");
+    } else if (fabricCategory === "Pure Cotton") {
+      console.log("Fabric category is 'Pure Cotton'");
+    } else if (fabricCategory === "Silk") {
+      console.log("Fabric category is 'Silk'");
+    }
+  }, [fabricCategory, materials]);
+
   useEffect(() => {
     // Fetch design elements as soon as component mounts
     fetchDesignElements();
   }, []);
 
-  // Separate useEffect to handle project data loading
+  // Add this function to extract material type consistently
+  const extractMaterialType = (product: any): string => {
+    if (!product) return '';
+    
+    const materialType = 
+      product.material || 
+      product.materialType || 
+      (product.materials && product.materials.length > 0 
+        ? (typeof product.materials[0] === 'object' && 'name' in product.materials[0]
+          ? product.materials[0].name 
+          : product.materials[0])
+        : '') || 
+      (product.name && materials.find(m => product.name.includes(m.name))?.name || '');
+    
+    // Ensure the material type is one of the valid options
+    return materials.find(m => m.name === materialType)?.name || '';
+  };
+
+  // Update material type extraction in both useEffect and handleProductSelect
+  const getMaterialType = (product: any): string => {
+    if (!product) return '';
+    
+    let materialType = '';
+    
+    // Case 1: Check if material is an object with name property
+    if (product.material) {
+      if (typeof product.material === 'object' && 'name' in product.material) {
+        console.log('Found material object with name:', product.material);
+        materialType = product.material.name;
+      } else if (typeof product.material === 'string') {
+        materialType = product.material;
+      }
+    }
+    // Case 2: Check materialType field
+    else if (product.materialType) {
+      materialType = product.materialType;
+    }
+    // Case 3: Check materials array
+    else if (product.materials && product.materials.length > 0) {
+      const firstMaterial = product.materials[0];
+      if (typeof firstMaterial === 'object' && 'name' in firstMaterial) {
+        materialType = firstMaterial.name;
+      } else if (typeof firstMaterial === 'string') {
+        materialType = firstMaterial;
+      }
+    }
+
+    // If no material found yet, try to extract from name
+    if (!materialType && product.name) {
+      if (product.name.includes('Khadi Cotton')) materialType = 'Khadi Cotton';
+      else if (product.name.includes('Pure Cotton')) materialType = 'Pure Cotton';
+      else if (product.name.includes('Silk')) materialType = 'Silk';
+    }
+
+    console.log('Extracted material type:', materialType, 'from product:', product);
+    return materialType;
+  };
+
+  // Update the useEffect that handles project data loading
   useEffect(() => {
     if (projectData) {
       console.log("Project data loaded:", projectData);
       setProjectName(projectData.name || '');
       setProjectDescription(projectData.description || '');
-      setFabricCategory(projectData.fabricCategory || '');
+      
+      // Check if the project data is from Add Project page
+      const isFromAddProject = !projectId || projectId.startsWith('temp-');
+      console.log("Is from Add Project page:", isFromAddProject);
+      
+      // Handle category ID from the project data - ENSURE we get the ID not the name
+      if (projectData.fabricCategory) {
+        console.log("Fabric category from project data:", projectData.fabricCategory);
+        
+        // Check if fabricCategory is an ID (MongoDB ObjectId format)
+        const isMongoId = /^[0-9a-fA-F]{24}$/.test(projectData.fabricCategory);
+        
+        if (isMongoId) {
+          // It's already a category ID, use directly
+          const categoryId = projectData.fabricCategory;
+          console.log("Using category ID directly:", categoryId);
+          setProductCategory(categoryId);
+        } else {
+          // It's a category name, we need to find the ID
+          console.log("Got category name, need to convert to ID:", projectData.fabricCategory);
+          
+          // Find the category ID from the name using the categories list
+          if (categories.length > 0) {
+            const category = categories.find(c => c.name.toLowerCase() === projectData.fabricCategory.toLowerCase());
+            if (category) {
+              console.log("Found category ID for name:", category._id);
+              setProductCategory(category._id);
+            } else {
+              console.warn("Could not find category ID for name:", projectData.fabricCategory);
+              // For backwards compatibility - keep the name but log a warning
+              setProductCategory(projectData.fabricCategory);
+            }
+          } else {
+            console.log("Categories not loaded yet, will set on categories load");
+            // Keep the name temporarily until categories are loaded
+            setProductCategory(projectData.fabricCategory);
+          }
+        }
+      }
+      
+      // Direct material data from Add Project
+      if (projectData.materialId) {
+        console.log("Setting material ID from project data:", projectData.materialId);
+        setSelectedMaterialId(projectData.materialId);
+      }
+      
+      if (projectData.materialName) {
+        console.log("Setting material name from project data:", projectData.materialName);
+        setFabricCategory(projectData.materialName);
+      }
+      
+      // CRITICAL: Set the selected carousel product ID if it exists
+      if (projectData.selectedProductId) {
+        const productId = typeof projectData.selectedProductId === 'object' 
+          ? projectData.selectedProductId._id 
+          : projectData.selectedProductId;
+        
+        console.log("Setting selected carousel product:", productId);
+        setSelectedCarouselProduct(productId);
+        setOriginalProductId(productId);
+        
+        // If the product is an object, we can get the fabric image directly
+        if (typeof projectData.selectedProductId === 'object') {
+          const product = projectData.selectedProductId;
+          console.log("Product is already loaded as object:", product);
+          
+          // Set the fabric image from product
+          if (product.images && product.images.length > 0) {
+            const imagePath = product.images[0];
+            const imageUrl = imagePath.startsWith('http')
+              ? imagePath
+              : `http://localhost:5173${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
+            
+            console.log("Setting fabric image from product object:", imageUrl);
+            setFabricImage(imageUrl);
+          }
+        } else {
+          // Need to fetch the product to get the image
+          console.log("Fetching product data to get image:", productId);
+          fetchProductData(productId).then(product => {
+            if (product && product.images && product.images.length > 0) {
+              const imagePath = product.images[0];
+              const imageUrl = imagePath.startsWith('http')
+                ? imagePath
+                : `http://localhost:5173${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
+              
+              console.log("Setting fabric image from fetched product:", imageUrl);
+              setFabricImage(imageUrl);
+            }
+          });
+        }
+      }
+      
+      // Also check direct fabricImage in the project data as fallback
+      if (projectData.fabricImage) {
+        console.log("Found fabric image directly in project data:", projectData.fabricImage);
+        const imagePath = projectData.fabricImage;
+        const imageUrl = imagePath.startsWith('http')
+          ? imagePath
+          : `http://localhost:5173${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
+        
+        console.log("Setting fabric image directly from project data:", imageUrl);
+        setFabricImage(imageUrl);
+      }
       
       // If there's design data, save it for later processing once design elements are loaded
       if (projectData.designData) {
         console.log("Found design data, saving for restoration:", projectData.designData);
         setPendingDesignData(projectData.designData);
       }
-      
-      // Process selected product ID and fabric image
-      console.log("Selected product ID:", projectData.selectedProductId);
-      
-      // Store the original product ID for checking if fabric changed later
-      if (projectData.selectedProductId) {
-        const originalId = typeof projectData.selectedProductId === 'object' 
-          ? projectData.selectedProductId._id 
-          : projectData.selectedProductId;
-        
-        console.log("Storing original product ID:", originalId);
-        setOriginalProductId(originalId);
-        setSelectedCarouselProduct(originalId);
-      }
-      
-      // Check for populated selectedProductId (which will be an object with the product data)
-      if (projectData.selectedProductId) {
-        // Check if it's a populated object or just an ID string
-        if (typeof projectData.selectedProductId === 'object') {
-          console.log("Found populated product data:", projectData.selectedProductId);
-          // Get the first image from the product
-          if (projectData.selectedProductId.images && projectData.selectedProductId.images.length > 0) {
-            const productImage = projectData.selectedProductId.images[0];
-            // Construct URL for the image
-            if (productImage.startsWith('http')) {
-              setFabricImage(productImage);
-            } else {
-              // Make sure we don't duplicate slashes
-              const imagePath = productImage.startsWith('/') 
-                ? productImage 
-                : `/${productImage}`;
-                
-              const imageUrl = `http://localhost:5173${imagePath}`;
-              console.log("Constructed product image URL from populated object:", imageUrl);
-              setFabricImage(imageUrl);
-            }
-          }
-        } else if (typeof projectData.selectedProductId === 'string') {
-          // We have just the ID, need to fetch the product data
-          console.log("Found product ID, need to fetch product data:", projectData.selectedProductId);
-          
-          // Create an async function inside the useEffect
-          const loadProductData = async () => {
-            const productData = await fetchProductData(projectData.selectedProductId as string);
-            
-            if (productData && productData.images && productData.images.length > 0) {
-              const productImage = productData.images[0];
-              
-              // Construct URL for the image
-              if (productImage.startsWith('http')) {
-                setFabricImage(productImage);
-              } else {
-                // Make sure we don't duplicate slashes
-                const imagePath = productImage.startsWith('/') 
-                  ? productImage 
-                  : `/${productImage}`;
-                  
-                const imageUrl = `http://localhost:5173${imagePath}`;
-                console.log("Constructed product image URL from fetched product:", imageUrl);
-                setFabricImage(imageUrl);
-              }
-            }
-          };
-          
-          // Call the async function
-          loadProductData();
-        }
-      }
-      // Fall back to fabricImage if selectedProductId doesn't have image data
-      else if (projectData.fabricImage) {
-        console.log("Found fabric image:", projectData.fabricImage);
-        // If it's already a full URL
-        if (projectData.fabricImage.startsWith('http')) {
-          setFabricImage(projectData.fabricImage);
-        } else {
-          // Make sure we don't duplicate slashes
-          const imagePath = projectData.fabricImage.startsWith('/') 
-            ? projectData.fabricImage 
-            : `/${projectData.fabricImage}`;
-            
-          // Use a direct hard-coded URL for debugging purposes
-          const imageUrl = `http://localhost:5173${imagePath}`;
-          console.log("Constructed image URL:", imageUrl);
-          setFabricImage(imageUrl);
-        }
-      } else {
-        console.log("No fabric image or selectedProduct found in project data");
-      }
     }
-  }, [projectData]);
+  }, [projectData, categories]);
 
   // Add a separate useEffect that depends on both designShapes and pendingDesignData
   // This will run after design elements are loaded and there's pending design data
@@ -379,7 +543,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
         console.error('Error parsing saved design data:', error);
       }
     }
-  }, [designShapes, pendingDesignData]);
+  }, [designShapes, pendingDesignData, materials]);
 
   // Add this debug useEffect to help troubleshoot
   useEffect(() => {
@@ -395,32 +559,32 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
         const elements = response.data.data
           .filter((element: any) => element.isActive !== false)
           .map((element: any) => ({
-            id: element._id,
-            name: element.name,
-            artType: element.artType,
-            isActive: element.isActive,
-            render: (color: string) => {
-              // Use the most reliable approach for coloring SVGs
-              const imageUrl = getImageUrl(element.image);
-              return (
-                <div style={{ 
-                  width: '100%', 
-                  height: '100%', 
-                  position: 'relative',
-                  backgroundColor: color !== '#FFFFFF' ? color : '#000000',
-                  WebkitMaskImage: `url(${imageUrl})`,
-                  maskImage: `url(${imageUrl})`,
-                  WebkitMaskSize: 'contain',
-                  maskSize: 'contain',
-                  WebkitMaskRepeat: 'no-repeat',
-                  maskRepeat: 'no-repeat',
-                  WebkitMaskPosition: 'center',
-                  maskPosition: 'center',
-                }}>
-                </div>
-              );
-            }
-          }));
+          id: element._id,
+          name: element.name,
+          artType: element.artType,
+          isActive: element.isActive,
+          render: (color: string) => {
+            // Use the most reliable approach for coloring SVGs
+            const imageUrl = getImageUrl(element.image);
+            return (
+              <div style={{ 
+                width: '100%', 
+                height: '100%', 
+                position: 'relative',
+                backgroundColor: color !== '#FFFFFF' ? color : '#000000',
+                WebkitMaskImage: `url(${imageUrl})`,
+                maskImage: `url(${imageUrl})`,
+                WebkitMaskSize: 'contain',
+                maskSize: 'contain',
+                WebkitMaskRepeat: 'no-repeat',
+                maskRepeat: 'no-repeat',
+                WebkitMaskPosition: 'center',
+                maskPosition: 'center',
+              }}>
+              </div>
+            );
+          }
+        }));
         console.log(`Loaded ${elements.length} design elements from API`);
         setDesignShapes(elements);
       } else {
@@ -495,7 +659,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
 
   const getShapeSetterForArea = (area: string): [(shapes: PlacedShape[]) => void, PlacedShape[]] => {
     // Simplified function - only Body area exists
-    return [setBodyShapes, bodyShapes];
+        return [setBodyShapes, bodyShapes];
   };
 
   // Add keyboard movement amount
@@ -899,44 +1063,112 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
     }
   };
 
-  // Apply the selected fabric from carousel
-  const handleProductSelect = async (product: ProductThumbnail) => {
+  // Update handleProductSelect to properly set the fabric image
+  const handleProductSelect = (product: ProductThumbnail) => {
+    console.log("Product selected from carousel:", product);
     setSelectedCarouselProduct(product._id);
-    
-    // Log product information for debugging
-    const materialInfo = product.material || 
-                         product.materialType || 
-                         (product.materials && product.materials.length > 0 ? 
-                           (typeof product.materials[0] === 'object' && 'name' in product.materials[0] ? 
-                             product.materials[0].name : product.materials[0]) : '');
-    
-    console.log("Selected product:", {
-      id: product._id,
-      name: product.name,
-      materialInfo,
-      category: product.category
-    });
-    
-    // Set the fabric image from the product
-    if (product.images && product.images.length > 0) {
-      const productImage = product.images[0];
-      
-      // Set fabric image using the same logic as before
-      if (productImage.startsWith('http')) {
-        setFabricImage(productImage);
-      } else {
-        const imagePath = productImage.startsWith('/') ? productImage : `/${productImage}`;
-        const imageUrl = `http://localhost:5173${imagePath}`;
-        console.log("Selected product image:", imageUrl);
-        setFabricImage(imageUrl);
+
+    // Extract material information
+    if (product.material) {
+      console.log("Product has material:", product.material);
+      if (typeof product.material === 'object' && product.material !== null) {
+        // Handle material as object
+        if ('_id' in product.material && 'name' in product.material) {
+          console.log("Setting material ID from object:", product.material._id);
+          console.log("Setting fabric category from object:", product.material.name);
+          setSelectedMaterialId(product.material._id);
+          setFabricCategory(product.material.name);
+        }
+      } else if (typeof product.material === 'string') {
+        // Handle material as string (ID)
+        console.log("Setting material ID from string:", product.material);
+        setSelectedMaterialId(product.material);
+        
+        // Look up the material name if available
+        const materialName = getMaterialNameById(product.material);
+        if (materialName) {
+          console.log("Setting fabric category from ID lookup:", materialName);
+          setFabricCategory(materialName);
+        }
       }
     }
-    
-    // Save this selection on next save
-    // Note: this doesn't save immediately, but will be included in the next handleSave call
+
+    // CRITICAL: Extract and set fabric image from product
+    if (product.images && product.images.length > 0) {
+      const imagePath = product.images[0];
+      const imageUrl = imagePath.startsWith('http')
+        ? imagePath
+        : `http://localhost:5173${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
+      
+      console.log("Setting fabric image from carousel selection:", imageUrl);
+      setFabricImage(imageUrl);
+    } else {
+      console.warn("Selected product has no images!");
+    }
+
+    // Extract and set product category if available
+    if (product.category) {
+      console.log("Product has category:", product.category);
+      if (typeof product.category === 'object' && product.category !== null && '_id' in product.category) {
+        console.log("Setting product category from object:", product.category._id);
+        setProductCategory(product.category._id);
+      } else if (typeof product.category === 'string') {
+        console.log("Setting product category from string:", product.category);
+        setProductCategory(product.category);
+      }
+    }
+
+    // Check if we've changed from the original product
+    if (originalProductId && originalProductId !== product._id) {
+      // Log that we've changed from the original product
+      console.log(`Fabric changed from original product ${originalProductId} to ${product._id}`);
+    } else {
+      console.log(`Selected the original product ${product._id}`);
+    }
   };
 
-  // The save function that actually performs the save operation
+  // Add the helper function to get material name by ID
+  const getMaterialNameById = (id: string): string => {
+    const material = materials.find(m => m._id === id);
+    return material ? material.name : '';
+  };
+
+  // Update the TextField that renders the material dropdown
+  <TextField
+    fullWidth
+    select
+    label="Fabric Material"
+    variant="outlined"
+    size="small"
+    value={fabricCategory || ""}
+    onChange={(e) => {
+      setFabricCategory(e.target.value);
+      // Find the material ID for this name
+      const material = materials.find(m => m.name === e.target.value);
+      if (material) {
+        setSelectedMaterialId(material._id);
+      }
+    }}
+    disabled={loadingMaterials}
+  >
+    {/* Always include these common materials */}
+    <MenuItem value="Khadi Cotton">Khadi Cotton</MenuItem>
+    <MenuItem value="Pure Cotton">Pure Cotton</MenuItem>
+    <MenuItem value="Silk">Silk</MenuItem>
+    
+    {/* Then include all materials from the API if they're different */}
+    {materials.filter(m => 
+      m.name !== "Khadi Cotton" && 
+      m.name !== "Pure Cotton" && 
+      m.name !== "Silk"
+    ).map((material) => (
+      <MenuItem key={material._id} value={material.name}>
+        {material.name}
+      </MenuItem>
+    ))}
+  </TextField>
+
+  // Update the saveProjectWithCurrentFabric function to save category ID
   const saveProjectWithCurrentFabric = async () => {
     try {
       if (!projectId) {
@@ -948,11 +1180,11 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
         return;
       }
 
-      const design = {
-        body: bodyShapes,
-        isLocked,
-        isFavorite,
-      };
+    const design = {
+      body: bodyShapes,
+      isLocked,
+      isFavorite,
+    };
 
       console.log(`Saving design with ${bodyShapes.length} body shapes`);
       if (bodyShapes.length > 0) {
@@ -973,7 +1205,21 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
       // Add updated project information
       formData.append('name', projectName);
       formData.append('description', projectDescription);
-      formData.append('fabricCategory', fabricCategory);
+      
+      // Use productCategory for fabricCategory field (proper category value)
+      // Make sure we're using the ID, not the display name
+      formData.append('fabricCategory', productCategory || 'Fabric');
+      console.log('Saving with category ID:', productCategory || 'Fabric');
+      
+      // Add material name as a separate field
+      formData.append('materialName', fabricCategory || '');
+      console.log('Saving with material name:', fabricCategory || '');
+      
+      // Also include the material ID if available
+      if (selectedMaterialId) {
+        formData.append('materialId', selectedMaterialId);
+        console.log('Saving with material ID:', selectedMaterialId);
+      }
       
       // Add the selected product ID if available
       if (selectedCarouselProduct) {
@@ -1254,7 +1500,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
               right: 0,
               bottom: 0,
               backgroundImage: 'linear-gradient(to right, rgba(221, 221, 221, 0.7) 1px, transparent 1px), linear-gradient(to bottom, rgba(221, 221, 221, 0.7) 1px, transparent 1px)',
-              backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
+            backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
               pointerEvents: 'none',
               zIndex: 2,
             }
@@ -1280,107 +1526,9 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
               boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
             }}
           >
-            {/* Only show Material Type */}
-            {(() => {
-              // Try to get the product info from different sources
-              let materialType = '';
-              
-              // Check if we have a populated product object
-              if (projectData && typeof projectData.selectedProductId === 'object' && projectData.selectedProductId) {
-                const product = projectData.selectedProductId;
-                
-                // First try standard material fields
-                if (typeof product.material === 'string') {
-                  materialType = product.material;
-                } else if (typeof product.materialType === 'string') {
-                  materialType = product.materialType;
-                } 
-                // Then check other possible fields
-                else if (product.materials && product.materials.length > 0) {
-                  if (typeof product.materials[0] === 'object' && 'name' in product.materials[0]) {
-                    materialType = product.materials[0].name.toString();
-                  } else if (typeof product.materials[0] === 'string') {
-                    materialType = product.materials[0];
-                  }
-                } else if (typeof product.materialInfo === 'string') {
-                  materialType = product.materialInfo;
-                }
-                
-                // If we still don't have material type, check the product name
-                if (!materialType && product.name) {
-                  // Extract material from product name
-                  if (product.name.includes('Khadi Cotton')) {
-                    materialType = 'Khadi Cotton';
-                  } else if (product.name.includes('Pure Cotton')) {
-                    materialType = 'Pure Cotton';
-                  } else if (product.name.includes('Cotton')) {
-                    materialType = 'Cotton';
-                  } else if (product.name.includes('Silk')) {
-                    materialType = 'Silk';
-                  }
-                }
-              } 
-              // Check if we have a selected product in carousel
-              else if (selectedCarouselProduct && diyProducts.length > 0) {
-                const product = diyProducts.find(p => p._id === selectedCarouselProduct);
-                if (product) {
-                  // First try standard material fields
-                  if (typeof product.material === 'string') {
-                    materialType = product.material;
-                  } else if (typeof product.materialType === 'string') {
-                    materialType = product.materialType;
-                  }
-                  
-                  // If we still don't have material type, check the product name
-                  if (!materialType && product.name) {
-                    // Extract material from product name
-                    if (product.name.includes('Khadi Cotton')) {
-                      materialType = 'Khadi Cotton';
-                    } else if (product.name.includes('Pure Cotton')) {
-                      materialType = 'Pure Cotton';
-                    } else if (product.name.includes('Cotton')) {
-                      materialType = 'Cotton';
-                    } else if (product.name.includes('Silk')) {
-                      materialType = 'Silk';
-                    }
-                  }
-                }
-              }
-              
-              // Fallback to looking at product ID directly if needed
-              if (!materialType && typeof projectData?.selectedProductId === 'string') {
-                const productId = projectData.selectedProductId;
-                
-                // Hard-coded mapping for the products in the screenshots
-                if (productId.includes('67e134')) {
-                  materialType = 'Khadi Cotton'; // Plain Green
-                } else if (productId.includes('67e137')) {
-                  materialType = 'Pure Cotton'; // Plain Pink
-                }
-              }
-              
-              // If all else fails, check project data directly
-              if (!materialType && projectData) {
-                const fabricInfo = projectData.fabricCategory;
-                if (fabricInfo === 'Sarees') {
-                  materialType = 'Cotton'; // Default assumption for sarees
-                }
-              }
-              
-              // Ensure materialType is a valid display string
-              const safeString = typeof materialType === 'string' && materialType && 
-                !materialType.includes('67d') // Exclude ID-like strings
-                ? materialType 
-                : 'Cotton'; // Default fallback
-              
-              console.log("Material type for label:", safeString);
-              
-              return safeString ? (
-                <Typography variant="caption" sx={{ fontWeight: 'medium' }}>
-                  {safeString}
-                </Typography>
-              ) : null;
-            })()}
+            <Typography variant="caption" sx={{ fontWeight: 'medium' }}>
+              {fabricCategory}
+            </Typography>
           </Box>
         )}
         
@@ -1567,22 +1715,22 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
                 }}
               >
                 {/* The actual content that gets cropped */}
-                <Box
-                  sx={{
-                    width: '100%',
-                    height: '100%',
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
+              <Box
+                sx={{
+                  width: '100%',
+                  height: '100%',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
                     right: 0,
                     bottom: 0,
                     ...(shape.cropSettings && {
                       clipPath: `inset(${shape.cropSettings.top}% ${shape.cropSettings.right}% ${shape.cropSettings.bottom}% ${shape.cropSettings.left}%)`,
                     }),
-                  }}
-                >
-                  {shape.render(shape.color)}
-                </Box>
+                }}
+              >
+                {shape.render(shape.color)}
+              </Box>
               </Box>
               
               {/* Direct Crop Handles */}
@@ -2008,6 +2156,385 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
     }
   }, [selectedColor]);
 
+  // Handle material change in dropdown
+  const handleMaterialChange = (event: SelectChangeEvent<string>) => {
+    const materialName = event.target.value;
+    console.log("Material changed to:", materialName);
+    setFabricCategory(materialName);
+    
+    // Find the material ID for the selected material name
+    const material = materials.find(m => m.name === materialName);
+    if (material) {
+      console.log("Setting selected material ID:", material._id);
+      setSelectedMaterialId(material._id);
+      
+      // Instead of clearing the selected product right away, 
+      // check if any products in the carousel will match the new material
+      const productsWithNewMaterial = diyProducts.filter(product => {
+        const productMaterialId = typeof product.material === 'object' && product.material?._id
+          ? product.material._id
+          : product.material;
+        
+        const productCategoryId = typeof product.category === 'object' && product.category?._id
+          ? product.category._id
+          : product.category;
+        
+        return productMaterialId === material._id && 
+               productCategoryId === productCategory &&
+               product.showInDIY === true;
+      });
+      
+      console.log(`Found ${productsWithNewMaterial.length} products with the new material`);
+      
+      if (productsWithNewMaterial.length > 0) {
+        // If we have products with this material, select the first one
+        const firstProduct = productsWithNewMaterial[0];
+        console.log("Auto-selecting product with new material:", firstProduct.name);
+        
+        // Set the selected carousel product
+        setSelectedCarouselProduct(firstProduct._id);
+        
+        // Update the fabric image
+        if (firstProduct.images && firstProduct.images.length > 0) {
+          const imagePath = firstProduct.images[0];
+          const imageUrl = imagePath.startsWith('http')
+            ? imagePath
+            : `http://localhost:5173${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
+          
+          console.log("Setting fabric image to new product:", imageUrl);
+          setFabricImage(imageUrl);
+        }
+      } else {
+        // No products match the new material, clear the selected product and image
+        console.log("No products match the new material, clearing design area");
+        setSelectedCarouselProduct('');
+        setFabricImage('');
+      }
+    } else {
+      console.warn("Could not find material with name:", materialName);
+    }
+  };
+
+  // Add state to track product category
+  const [productCategory, setProductCategory] = useState<string>('');
+
+  // Add useEffect to reset carousel page when filters change
+  useEffect(() => {
+    // Reset carousel page to 0 when product category or material changes
+    setCurrentCarouselPage(0);
+  }, [productCategory, selectedMaterialId]);
+
+  // Add a helper function to get category name by ID
+  const getCategoryNameById = (id: string): string => {
+    const category = categories.find(c => c._id === id);
+    return category ? category.name : id;
+  };
+
+  // Add this effect to ensure dropdowns get populated when materials and categories are loaded
+  useEffect(() => {
+    // If we have materials, categories, and project data loaded, update the dropdowns
+    if (materials.length > 0 && categories.length > 0 && projectData) {
+      console.log("Materials and categories loaded, updating dropdowns");
+      
+      // If we have a material ID but no name, try to find it
+      if (selectedMaterialId && !fabricCategory) {
+        const material = materials.find(m => m._id === selectedMaterialId);
+        if (material) {
+          console.log("Found material name from ID:", material.name);
+          setFabricCategory(material.name);
+        }
+      }
+      
+      // If we have a category ID, check if we need to update the display value
+      if (productCategory) {
+        const category = categories.find(c => c._id === productCategory);
+        if (category) {
+          console.log("Found category name from ID:", category.name);
+          // We might need to update the display value in the UI
+          document.getElementById('product-category-field')?.setAttribute('data-display-value', category.name);
+        }
+      }
+    }
+  }, [materials, categories, projectData, selectedMaterialId, productCategory]);
+
+  // Update the material filtering logic
+  const filteredMaterials = useMemo(() => {
+    console.log("Filtering materials for dropdown. Available materials:", materials);
+    console.log("Current product category:", productCategory);
+    console.log("Current selected material ID:", selectedMaterialId);
+    console.log("Current fabric category (name):", fabricCategory);
+    
+    // If no product category is selected, show all materials
+    if (!productCategory) {
+      console.log("No product category selected, showing all materials");
+      return materials;
+    }
+    
+    const isMongoId = /^[0-9a-fA-F]{24}$/.test(productCategory);
+    if (!isMongoId) {
+      console.log("Product category is not a valid MongoDB ID, showing all materials:", productCategory);
+      return materials;
+    }
+    
+    // For materials dropdown, we need to show ALL materials that belong to the selected category
+    console.log("Filtering materials by product category ID:", productCategory);
+    
+    // Get all materials used by products in the selected category
+    const categoryMaterials = materials.filter(material => {
+      const materialUsedInCategory = diyProducts.some(product => {
+        // Get category ID, handling both object and string cases
+        const productCategoryId = 
+          typeof product.category === 'object' && product.category !== null
+            ? product.category._id
+            : product.category;
+        
+        // Get material ID, handling both object and string cases
+        const productMaterialId = 
+          typeof product.material === 'object' && product.material !== null
+            ? product.material._id
+            : product.material;
+        
+        // Check if this product belongs to the selected category and uses this material
+        const match = productCategoryId === productCategory && productMaterialId === material._id;
+        console.log(`Checking product ${product.name} - category: ${productCategoryId} vs ${productCategory}, material: ${productMaterialId} vs ${material._id}, match: ${match}`);
+        return match;
+      });
+      
+      console.log(`Material ${material.name} used in category ${getCategoryNameById(productCategory)}: ${materialUsedInCategory}`);
+      return materialUsedInCategory;
+    });
+    
+    // Special case: if the selected material is not in the filtered list, add it
+    if (selectedMaterialId && !categoryMaterials.some(m => m._id === selectedMaterialId)) {
+      console.log("Adding selected material to the dropdown even though it's not in the filtered list");
+      const selectedMaterial = materials.find(m => m._id === selectedMaterialId);
+      if (selectedMaterial) {
+        return [...categoryMaterials, selectedMaterial];
+      }
+    }
+    
+    console.log("Materials for selected category:", categoryMaterials.map(m => m.name));
+    return categoryMaterials.length > 0 ? categoryMaterials : materials; // Fallback to all materials if none match
+  }, [materials, productCategory, diyProducts, selectedMaterialId]);
+
+  // Get a count of products matching the selected category and material
+  useEffect(() => {
+    if (!diyProducts.length) return;
+    
+    const productsForCategory = diyProducts.filter(product => {
+      const productCategoryId = typeof product.category === 'object' && product.category !== null
+        ? product.category._id
+        : product.category;
+      
+      return productCategoryId === productCategory;
+    });
+    
+    const productsForMaterial = diyProducts.filter(product => {
+      const productMaterialId = typeof product.material === 'object' && product.material !== null
+        ? product.material._id
+        : product.material;
+      
+      return productMaterialId === selectedMaterialId;
+    });
+    
+    const productsForBoth = diyProducts.filter(product => {
+      const productCategoryId = typeof product.category === 'object' && product.category !== null
+        ? product.category._id
+        : product.category;
+      
+      const productMaterialId = typeof product.material === 'object' && product.material !== null
+        ? product.material._id
+        : product.material;
+      
+      return productCategoryId === productCategory && productMaterialId === selectedMaterialId;
+    });
+    
+    console.log('Products matching filters:', {
+      totalProducts: diyProducts.length,
+      matchingCategory: productsForCategory.length,
+      matchingMaterial: productsForMaterial.length,
+      matchingBoth: productsForBoth.length,
+      categoryProducts: productsForCategory.map(p => p.name),
+      materialProducts: productsForMaterial.map(p => p.name),
+      bothProducts: productsForBoth.map(p => p.name)
+    });
+  }, [diyProducts, productCategory, selectedMaterialId]);
+
+  // Add this useEffect to ensure proper category ID conversion when categories load
+  useEffect(() => {
+    // This useEffect runs when categories are loaded and productCategory is set
+    if (categories.length > 0 && productCategory) {
+      // Check if the current productCategory is not in MongoDB ObjectId format
+      // and might be a category name instead
+      const isMongoId = /^[0-9a-fA-F]{24}$/.test(productCategory);
+      
+      if (!isMongoId) {
+        console.log("Current product category appears to be a name, converting to ID:", productCategory);
+        // Find the matching category by name
+        const category = categories.find(c => c.name.toLowerCase() === productCategory.toLowerCase());
+        if (category) {
+          console.log("Found matching category ID:", category._id);
+          // Update the product category to the actual ID
+          setProductCategory(category._id);
+        }
+      }
+    }
+  }, [categories, productCategory]);
+
+  // Update the carousel filtering logic to handle category matching correctly
+  const filteredCarouselProducts = useMemo(() => {
+    if (!diyProducts.length) return [];
+    
+    console.log("Filtering carousel products with:", {
+      productCategory,
+      selectedMaterialId,
+      selectedCarouselProduct
+    });
+    
+    return diyProducts.filter(product => {
+      // Extract product material ID
+      const productMaterialId = product.material && typeof product.material === 'object' && product.material._id
+        ? product.material._id 
+        : typeof product.material === 'string' ? product.material : '';
+      
+      // Extract product category ID
+      const productCategoryId = product.category && typeof product.category === 'object' && product.category._id
+        ? product.category._id
+        : typeof product.category === 'string' ? product.category : '';
+      
+      // Log product details for debugging
+      console.log(`Filtering carousel product: ${product.name}`, {
+        id: product._id,
+        productCategoryId,
+        selectedCategoryId: productCategory,
+        categoryMatch: productCategoryId === productCategory,
+        productMaterialId,
+        selectedMaterialId,
+        materialMatch: productMaterialId === selectedMaterialId,
+        showInDIY: product.showInDIY
+      });
+      
+      // For products to show in the carousel, they must:
+      // 1. Have showInDIY set to true
+      // 2. Match the selected category
+      // 3. Match the selected material
+      const matchesShowInDIY = product.showInDIY === true;
+      const matchesCategory = productCategoryId === productCategory;
+      const matchesMaterial = productMaterialId === selectedMaterialId;
+      
+      const shouldShow = matchesShowInDIY && matchesCategory && matchesMaterial;
+      
+      console.log(`Carousel product ${product.name} - showInDIY: ${matchesShowInDIY}, category match: ${matchesCategory}, material match: ${matchesMaterial}, should show: ${shouldShow}`);
+      
+      return shouldShow;
+    });
+  }, [diyProducts, productCategory, selectedMaterialId, selectedCarouselProduct]);
+
+  // Add this useEffect to log key state changes for debugging
+  useEffect(() => {
+    console.log("Key state values updated:", {
+      projectCategory: productCategory,
+      categoryName: getCategoryNameById(productCategory),
+      selectedMaterialId,
+      materialName: fabricCategory,
+      categoriesLoaded: categories.length,
+      materialsLoaded: materials.length,
+      productsLoaded: diyProducts.length
+    });
+  }, [productCategory, selectedMaterialId, fabricCategory, categories.length, materials.length, diyProducts.length]);
+
+  // Add useEffect to monitor fabric image changes
+  useEffect(() => {
+    if (fabricImage) {
+      console.log("Fabric image set:", fabricImage);
+    } else {
+      console.log("Fabric image is empty, trying to set from selected carousel product");
+      
+      // If we have a selected product but no image, try to get the image from it
+      if (selectedCarouselProduct && diyProducts.length > 0) {
+        const product = diyProducts.find(p => p._id === selectedCarouselProduct);
+        if (product && product.images && product.images.length > 0) {
+          const imagePath = product.images[0];
+          const imageUrl = imagePath.startsWith('http')
+            ? imagePath
+            : `http://localhost:5173${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
+          
+          console.log("Setting fabric image from selected carousel product:", imageUrl);
+          setFabricImage(imageUrl);
+        }
+      }
+    }
+  }, [fabricImage, selectedCarouselProduct, diyProducts]);
+
+  // Add a debug helper to log when things are loaded
+  useEffect(() => {
+    console.log("Design page state:", {
+      projectId,
+      selectedCarouselProduct,
+      fabricImage: fabricImage ? 'Set' : 'Not set',
+      diyProductsCount: diyProducts.length,
+      hasProject: !!projectData
+    });
+  }, [projectId, selectedCarouselProduct, fabricImage, diyProducts.length, projectData]);
+
+  // Update the useEffect that runs when material or category changes to auto-select a product
+  useEffect(() => {
+    // Skip if no products loaded yet
+    if (!diyProducts.length) return;
+    // Skip if we already have a selected product that matches the current material
+    if (selectedCarouselProduct) {
+      const selectedProduct = diyProducts.find(p => p._id === selectedCarouselProduct);
+      if (selectedProduct) {
+        const productMaterialId = typeof selectedProduct.material === 'object' && selectedProduct.material?._id
+          ? selectedProduct.material._id
+          : selectedProduct.material;
+
+        // If the selected product already matches the current material, keep it
+        if (productMaterialId === selectedMaterialId) {
+          console.log("Selected carousel product already matches current material, keeping it");
+          return;
+        }
+      }
+    }
+
+    // Find products that match the current category and material
+    const matchingProducts = diyProducts.filter(product => {
+      const productMaterialId = typeof product.material === 'object' && product.material?._id
+        ? product.material._id
+        : product.material;
+      
+      const productCategoryId = typeof product.category === 'object' && product.category?._id
+        ? product.category._id
+        : product.category;
+      
+      return productMaterialId === selectedMaterialId && 
+             productCategoryId === productCategory &&
+             product.showInDIY === true;
+    });
+
+    console.log(`Found ${matchingProducts.length} products matching current material and category`);
+    
+    // If we have matching products but none selected, auto-select the first one
+    if (matchingProducts.length > 0 && !selectedCarouselProduct) {
+      const firstProduct = matchingProducts[0];
+      console.log("Auto-selecting first matching product:", firstProduct.name);
+      
+      // Set the selected carousel product
+      setSelectedCarouselProduct(firstProduct._id);
+      
+      // Update the fabric image
+      if (firstProduct.images && firstProduct.images.length > 0) {
+        const imagePath = firstProduct.images[0];
+        const imageUrl = imagePath.startsWith('http')
+          ? imagePath
+          : `http://localhost:5173${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
+        
+        console.log("Setting fabric image to auto-selected product:", imageUrl);
+        setFabricImage(imageUrl);
+      }
+    }
+  }, [selectedMaterialId, productCategory, diyProducts, selectedCarouselProduct]);
+
   return (
     <Box sx={{ 
       height: '100vh', 
@@ -2040,18 +2567,38 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
         />
         <TextField
           fullWidth
-          select
-          label="Fabric Category"
+          id="product-category-field"
+          label="Product Category"
           variant="outlined"
           size="small"
-          value={fabricCategory}
-          onChange={(e) => setFabricCategory(e.target.value)}
+          value={productCategory ? getCategoryNameById(productCategory) : ""}
+          InputProps={{
+            readOnly: true,
+          }}
+          sx={{ mb: 1 }}
+        />
+        <FormControl 
+          fullWidth 
+          size="small"
+          sx={{ mb: 1 }}
         >
-          <MenuItem value="Bags">Bags</MenuItem>
-          <MenuItem value="Blouses">Blouses</MenuItem>
-          <MenuItem value="Sarees">Sarees</MenuItem>
-          <MenuItem value="Scarfs / Chunni / Dupatta">Scarfs / Chunni / Dupatta</MenuItem>
-        </TextField>
+          <InputLabel>Fabric Material</InputLabel>
+          <Select
+            value={fabricCategory}
+            onChange={handleMaterialChange}
+            label="Fabric Material"
+            MenuProps={{ 
+              style: { maxHeight: '300px' } 
+            }}
+          >
+            {/* Use filteredMaterials or fallback to all materials if empty */}
+            {(filteredMaterials.length > 0 ? filteredMaterials : materials).map(material => (
+              <MenuItem key={material._id} value={material.name}>
+                {material.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
       </Box>
 
       {/* Toolbar */}
@@ -2136,69 +2683,69 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
           height: '100%',
         }}>
           <Box sx={{ 
-            p: 1.5, 
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
+          p: 1.5,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
             borderBottom: '1px solid #eee',
             height: '60px', // Match the height of the carousel
-          }}>
-            <TextField
-              fullWidth
-              size="small"
-              placeholder="Search Design"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon fontSize="small" />
-                  </InputAdornment>
-                ),
+        }}>
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Search Design"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
                 sx: { height: '36px' }, // Consistent height
-              }}
+            }}
               sx={{ flex: 1 }}
-            />
+          />
             <IconButton size="small">
-              <ChevronLeftIcon />
+          <ChevronLeftIcon />
             </IconButton>
-          </Box>
-          
+        </Box>
+
           {/* Remove the Design Blocks title */}
           {renderDesignBlocks()}
-          
+
           {/* Color Palette */}
-          <Box sx={{ 
-            p: 1.5,
+        <Box sx={{ 
+          p: 1.5,
             mt: 'auto',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
             borderTop: '1px solid #ccc',
             height: '60px', // Consistent height
+        }}>
+          {colorPage > 0 && (
+            <IconButton 
+              size="small" 
+              onClick={() => setColorPage(prev => prev - 1)}
+            >
+              <ChevronLeftIcon sx={{ fontSize: '16px' }} />
+            </IconButton>
+          )}
+          <Box sx={{ 
+            display: 'grid',
+            gridTemplateColumns: 'repeat(6, 1fr)',
+            gap: 0.5,
+            flex: 1,
           }}>
-            {colorPage > 0 && (
-              <IconButton 
-                size="small" 
-                onClick={() => setColorPage(prev => prev - 1)}
-              >
-                <ChevronLeftIcon sx={{ fontSize: '16px' }} />
-              </IconButton>
-            )}
-            <Box sx={{ 
-              display: 'grid',
-              gridTemplateColumns: 'repeat(6, 1fr)',
-              gap: 0.5,
-              flex: 1,
-            }}>
-              {colorPalette.map((color) => (
-                <Box
-                  key={color}
-                  onClick={() => setSelectedColor(color)}
-                  sx={{
+            {colorPalette.map((color) => (
+              <Box
+                key={color}
+                onClick={() => setSelectedColor(color)}
+                sx={{
                     height: '24px',
-                    bgcolor: color,
-                    cursor: 'pointer',
+                  bgcolor: color,
+                  cursor: 'pointer',
                     border: selectedColor === color ? '2px solid #000' : '1px solid #ccc',
                     borderRadius: '2px',
                     transition: 'transform 0.15s',
@@ -2206,30 +2753,30 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
                       opacity: 0.9,
                       transform: 'scale(1.1)',
                     },
-                  }}
-                />
-              ))}
-            </Box>
-            {colorPage < allColors.length - 1 && (
-              <IconButton 
-                size="small" 
-                onClick={() => setColorPage(prev => prev + 1)}
-              >
-                <ChevronRightIcon sx={{ fontSize: '16px' }} />
-              </IconButton>
-            )}
+                }}
+              />
+            ))}
+          </Box>
+          {colorPage < allColors.length - 1 && (
+            <IconButton 
+              size="small" 
+              onClick={() => setColorPage(prev => prev + 1)}
+            >
+              <ChevronRightIcon sx={{ fontSize: '16px' }} />
+            </IconButton>
+          )}
           </Box>
         </Box>
 
         {/* Saree Thumbnails Carousel - Updated to use real product data */}
-        <Box sx={{
+        <Box sx={{ 
           borderBottom: '1px solid #eee',
           height: '60px',
           position: 'relative',
           bgcolor: '#fce4ec',
           display: 'flex',
           alignItems: 'center',
-          px: 1.5, // Match the padding of the search box
+          px: 1.5,
         }}>
           {/* Left Arrow - Fixed position */}
           <IconButton 
@@ -2253,7 +2800,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
             alignItems: 'center',
             overflow: 'hidden',
             position: 'relative',
-            px: 4, // Add horizontal padding to account for arrows
+            px: 4,
           }}>
             {loadingProducts ? (
               <Typography variant="body2">Loading products...</Typography>
@@ -2281,8 +2828,8 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
                 alignItems: 'center',
                 gap: 2.5,
               }}>
-                {/* Render all thumbnails for the current page */}
-                {diyProducts
+                {/* Filter products based on showInDIY, category ID, and material ID */}
+                {filteredCarouselProducts
                   .slice(
                     currentCarouselPage * thumbnailsPerPage, 
                     (currentCarouselPage + 1) * thumbnailsPerPage
@@ -2295,7 +2842,8 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
                       : '';
                     
                     // Get material info to display in the tooltip
-                    const materialInfo = product.material || 
+                    const materialInfo = product.material && typeof product.material === 'object' && 'name' in product.material ? product.material.name : 
+                                        product.material || 
                                         product.materialType || 
                                         (product.materials && product.materials.length > 0 ? 
                                           (typeof product.materials[0] === 'object' && 'name' in product.materials[0] ? 

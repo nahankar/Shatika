@@ -7,10 +7,6 @@ import {
   Typography,
   Paper,
   Grid,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   CircularProgress,
   Snackbar,
   Alert,
@@ -24,9 +20,11 @@ const AddProject = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    fabricCategory: '',
     fabricImageUrl: '',
     selectedProductId: '',
+    productCategory: '',
+    productMaterial: '',
+    productMaterialName: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,10 +33,32 @@ const AddProject = () => {
     if (location.state) {
       if (location.state.selectedProduct) {
         const { selectedProduct } = location.state;
+        console.log("Selected product in AddProject:", selectedProduct);
+        
+        let materialId = '';
+        let materialName = '';
+        
+        if (selectedProduct.material) {
+          if (typeof selectedProduct.material === 'object' && selectedProduct.material !== null) {
+            materialId = selectedProduct.material._id || '';
+            materialName = selectedProduct.material.name || '';
+          } else if (typeof selectedProduct.material === 'string') {
+            materialId = selectedProduct.material;
+          }
+        }
+        
         setFormData(prev => ({
           ...prev,
           fabricImageUrl: selectedProduct.images?.[0] || '',
           selectedProductId: selectedProduct._id || '',
+          productCategory: 
+            selectedProduct.category && typeof selectedProduct.category === 'object' && selectedProduct.category.name 
+              ? selectedProduct.category.name 
+              : typeof selectedProduct.category === 'string' 
+                ? selectedProduct.category 
+                : '',
+          productMaterial: materialId,
+          productMaterialName: materialName,
         }));
       }
       
@@ -51,25 +71,11 @@ const AddProject = () => {
     }
   }, [location.state]);
 
-  const fabricCategories = [
-    'Bags',
-    'Blouses',
-    'Sarees',
-    'Scarfs / Chunni / Dupatta',
-  ];
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
-    }));
-  };
-
-  const handleSelectChange = (e: any) => {
-    setFormData((prev) => ({
-      ...prev,
-      fabricCategory: e.target.value,
     }));
   };
 
@@ -79,7 +85,6 @@ const AddProject = () => {
         formData: {
           name: formData.name,
           description: formData.description,
-          fabricCategory: formData.fabricCategory,
         }
       }
     });
@@ -100,14 +105,22 @@ const AddProject = () => {
       const projectData = new FormData();
       projectData.append('name', formData.name);
       projectData.append('description', formData.description);
-      projectData.append('fabricCategory', formData.fabricCategory);
+      projectData.append('fabricCategory', formData.productCategory || 'Fabric');
       
-      // Only append fabricImage if it's not a product-based image (for legacy support)
+      if (formData.productMaterial) {
+        projectData.append('materialId', formData.productMaterial);
+        console.log('Sending materialId:', formData.productMaterial);
+      }
+      
+      if (formData.productMaterialName) {
+        projectData.append('materialName', formData.productMaterialName);
+        console.log('Sending materialName:', formData.productMaterialName);
+      }
+      
       if (formData.fabricImageUrl && !formData.selectedProductId) {
         projectData.append('fabricImage', formData.fabricImageUrl);
       }
       
-      // Always append the selectedProductId if available
       if (formData.selectedProductId) {
         projectData.append('selectedProductId', formData.selectedProductId);
         console.log('Sending selectedProductId:', formData.selectedProductId);
@@ -119,7 +132,12 @@ const AddProject = () => {
         const projectId = response.data.data._id;
         navigate(`/diy/design/${projectId}`, { 
           state: { 
-            projectData: response.data.data
+            projectData: {
+              ...response.data.data,
+              materialId: formData.productMaterial,
+              materialName: formData.productMaterialName,
+              category: formData.productCategory
+            }
           }
         });
       } else {
@@ -168,23 +186,6 @@ const AddProject = () => {
                 rows={4}
                 required
               />
-            </Grid>
-
-            <Grid item xs={12}>
-              <FormControl fullWidth required>
-                <InputLabel>Select Fabric Category</InputLabel>
-                <Select
-                  value={formData.fabricCategory}
-                  label="Select Fabric Category"
-                  onChange={handleSelectChange}
-                >
-                  {fabricCategories.map((category) => (
-                    <MenuItem key={category} value={category}>
-                      {category}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
             </Grid>
 
             <Grid item xs={12}>

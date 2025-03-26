@@ -4,6 +4,8 @@ export interface IProject extends Document {
   name: string;
   description: string;
   fabricCategory: string;
+  materialId?: string;
+  materialName?: string;
   fabricImage?: string;
   designData?: string; // JSON string containing design information
   user: mongoose.Types.ObjectId;
@@ -27,6 +29,12 @@ const projectSchema = new Schema<IProject>(
     fabricCategory: {
       type: String,
       required: [true, 'Fabric category is required'],
+    },
+    materialId: {
+      type: String,
+    },
+    materialName: {
+      type: String,
     },
     fabricImage: {
       type: String,
