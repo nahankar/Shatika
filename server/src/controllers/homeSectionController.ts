@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
+import { UploadedFile } from 'express-fileupload';
 import HomeSection from '../models/HomeSection';
+import cloudinary from '../config/cloudinary';
 
 // Get all home sections
 export const getHomeSections = async (_req: Request, res: Response): Promise<void> => {
@@ -31,7 +33,7 @@ export const createHomeSection = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    if (!req.file) {
+    if (!req.files?.image || Array.isArray(req.files.image)) {
       res.status(400).json({
         success: false,
         message: 'Image is required',
@@ -39,14 +41,17 @@ export const createHomeSection = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const imageUrl = `${baseUrl}/uploads/${req.file.filename}`;
+    const file = req.files.image as UploadedFile;
+    const result = await cloudinary.uploader.upload(file.tempFilePath, {
+      folder: 'shatika',
+      resource_type: 'auto',
+    });
 
     const section = await HomeSection.create({
       type,
       name,
       displayOrder,
-      image: imageUrl,
+      image: result.secure_url,
     });
 
     res.status(201).json({
@@ -68,9 +73,13 @@ export const updateHomeSection = async (req: Request, res: Response): Promise<vo
     const { type, name, displayOrder, isActive } = req.body;
     const updateData: any = { type, name, displayOrder, isActive };
 
-    if (req.file) {
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
-      updateData.image = `${baseUrl}/uploads/${req.file.filename}`;
+    if (req.files?.image && !Array.isArray(req.files.image)) {
+      const file = req.files.image as UploadedFile;
+      const result = await cloudinary.uploader.upload(file.tempFilePath, {
+        folder: 'shatika',
+        resource_type: 'auto',
+      });
+      updateData.image = result.secure_url;
     }
 
     const section = await HomeSection.findByIdAndUpdate(
@@ -103,7 +112,7 @@ export const updateHomeSection = async (req: Request, res: Response): Promise<vo
 // Delete home section
 export const deleteHomeSection = async (req: Request, res: Response): Promise<void> => {
   try {
-    const section = await HomeSection.findByIdAndDelete(req.params.id);
+    const section = await HomeSection.findById(req.params.id);
 
     if (!section) {
       res.status(404).json({
@@ -112,6 +121,16 @@ export const deleteHomeSection = async (req: Request, res: Response): Promise<vo
       });
       return;
     }
+
+    // Extract public_id from Cloudinary URL
+    if (section.image) {
+      const publicId = section.image.split('/').pop()?.split('.')[0];
+      if (publicId) {
+        await cloudinary.uploader.destroy(`shatika/${publicId}`);
+      }
+    }
+
+    await section.deleteOne();
 
     res.json({
       success: true,
