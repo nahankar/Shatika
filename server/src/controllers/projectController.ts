@@ -1,55 +1,77 @@
 import { Request, Response } from 'express';
+import { UploadedFile } from 'express-fileupload';
 import Project from '../models/Project';
-const asyncHandler = require('express-async-handler');
-import path from 'path';
-import fs from 'fs';
+import cloudinary from '../config/cloudinary';
 
 // @desc    Get all projects
 // @route   GET /api/projects
 // @access  Public
-export const getProjects = asyncHandler(async (_req: Request, res: Response) => {
-  const projects = await Project.find().sort({ createdAt: -1 });
-  
-  res.status(200).json({
-    success: true,
-    count: projects.length,
-    data: projects
-  });
-});
+export const getProjects = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const projects = await Project.find().sort({ createdAt: -1 });
+    
+    res.status(200).json({
+      success: true,
+      count: projects.length,
+      data: projects
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching projects',
+      error: error.message
+    });
+  }
+};
 
 // @desc    Get a single project
 // @route   GET /api/projects/:id
 // @access  Public
-export const getProject = asyncHandler(async (req: Request, res: Response) => {
-  const project = await Project.findById(req.params.id)
-    .populate('selectedProductId')
-    .lean();
-  
-  if (!project) {
-    res.status(404);
-    throw new Error('Project not found');
+export const getProject = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const project = await Project.findById(req.params.id)
+      .populate('selectedProductId')
+      .lean();
+    
+    if (!project) {
+      res.status(404).json({
+        success: false,
+        message: 'Project not found'
+      });
+      return;
+    }
+    
+    res.status(200).json({
+      success: true,
+      data: project
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching project',
+      error: error.message
+    });
   }
-  
-  res.status(200).json({
-    success: true,
-    data: project
-  });
-});
+};
 
 // @desc    Create a new project
 // @route   POST /api/projects
 // @access  Private
-export const createProject = async (req: Request, res: Response) => {
+export const createProject = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, description, fabricCategory, selectedProductId, materialId, materialName } = req.body;
+    const { name, description, fabricCategory, selectedProductId, materialId, materialName, designData } = req.body;
     
     // Handle file upload if present
     let fabricImage = '';
-    if (req.file) {
-      fabricImage = `/uploads/${req.file.filename}`;
+    if (req.files?.fabricImage && !Array.isArray(req.files.fabricImage)) {
+      const file = req.files.fabricImage as UploadedFile;
+      const result = await cloudinary.uploader.upload(file.tempFilePath, {
+        folder: 'shatika',
+        resource_type: 'auto',
+      });
+      fabricImage = result.secure_url;
     }
     
-    // If no file was uploaded but selectedProductId exists, use that
     // Create the project with all available data
     const newProject = new Project({
       name,
@@ -58,6 +80,7 @@ export const createProject = async (req: Request, res: Response) => {
       materialId,
       materialName,
       fabricImage,
+      designData,
       user: req.user._id,
       selectedProductId: selectedProductId || null,
     });
@@ -70,13 +93,13 @@ export const createProject = async (req: Request, res: Response) => {
       .populate('selectedProductId')
       .exec();
     
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
       data: populatedProject
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating project:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: 'Error creating project',
       error: error.message
@@ -85,90 +108,137 @@ export const createProject = async (req: Request, res: Response) => {
 };
 
 // @desc    Update a project
-// @route   PUT /api/projects/:id
+// @route   PATCH /api/projects/:id
 // @access  Private
-export const updateProject = asyncHandler(async (req: Request, res: Response) => {
-  let project = await Project.findById(req.params.id);
-  
-  if (!project) {
-    res.status(404);
-    throw new Error('Project not found');
-  }
-  
-  // Check if user owns the project or is admin
-  if (project.user && project.user.toString() !== req.user?._id.toString() && req.user?.role !== 'admin') {
-    res.status(403);
-    throw new Error('User not authorized to update this project');
-  }
-  
-  // Process file upload if present
-  let fabricImage = project.fabricImage;
-  
-  if (req.file) {
-    // Delete old image if exists
-    if (project.fabricImage) {
-      const oldImagePath = path.join(__dirname, '..', '..', 'uploads', project.fabricImage.replace('/uploads/', ''));
-      if (fs.existsSync(oldImagePath)) {
-        fs.unlinkSync(oldImagePath);
-      }
+export const updateProject = async (req: Request, res: Response): Promise<void> => {
+  try {
+    let project = await Project.findById(req.params.id);
+    
+    if (!project) {
+      res.status(404).json({
+        success: false,
+        message: 'Project not found'
+      });
+      return;
     }
-    fabricImage = `/uploads/${req.file.filename}`;
+    
+    // Check if user owns the project or is admin
+    if (project.user && project.user.toString() !== req.user?._id.toString() && req.user?.role !== 'admin') {
+      res.status(403).json({
+        success: false,
+        message: 'User not authorized to update this project'
+      });
+      return;
+    }
+    
+    // Process file upload if present
+    let fabricImage = project.fabricImage;
+    
+    if (req.files?.fabricImage && !Array.isArray(req.files.fabricImage)) {
+      // Delete old image from Cloudinary if exists
+      if (project.fabricImage) {
+        const publicId = project.fabricImage.split('/').pop()?.split('.')[0];
+        if (publicId) {
+          await cloudinary.uploader.destroy(`shatika/${publicId}`);
+        }
+      }
+      
+      const file = req.files.fabricImage as UploadedFile;
+      const result = await cloudinary.uploader.upload(file.tempFilePath, {
+        folder: 'shatika',
+        resource_type: 'auto',
+      });
+      fabricImage = result.secure_url;
+    }
+    
+    // Create update object with only the fields that are present
+    const updateData: any = {};
+    
+    // Update fields only if they are present in the request
+    if (req.body.name) updateData.name = req.body.name;
+    if (req.body.description) updateData.description = req.body.description;
+    if (req.body.fabricCategory) updateData.fabricCategory = req.body.fabricCategory;
+    if (req.body.materialId) updateData.materialId = req.body.materialId;
+    if (req.body.materialName) updateData.materialName = req.body.materialName;
+    if (req.body.designData) updateData.designData = req.body.designData;
+    if (req.body.selectedProductId) updateData.selectedProductId = req.body.selectedProductId;
+    if (fabricImage !== project.fabricImage) updateData.fabricImage = fabricImage;
+    
+    // Update project with only the changed fields
+    project = await Project.findByIdAndUpdate(
+      req.params.id, 
+      updateData,
+      { new: true, runValidators: true }
+    ).populate('selectedProductId');
+    
+    if (!project) {
+      res.status(404).json({
+        success: false,
+        message: 'Project not found after update'
+      });
+      return;
+    }
+    
+    res.status(200).json({
+      success: true,
+      data: project
+    });
+  } catch (error: any) {
+    console.error('Error updating project:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating project',
+      error: error.message
+    });
   }
-  
-  // Update project
-  project = await Project.findByIdAndUpdate(
-    req.params.id, 
-    { 
-      name: req.body.name,
-      description: req.body.description,
-      fabricCategory: req.body.fabricCategory,
-      materialId: req.body.materialId || project.materialId,
-      materialName: req.body.materialName || project.materialName,
-      fabricImage,
-      designData: req.body.designData || project.designData, // Keep existing designData if not provided
-      selectedProductId: req.body.selectedProductId || project.selectedProductId,
-    },
-    { new: true, runValidators: true }
-  );
-  
-  res.status(200).json({
-    success: true,
-    data: project
-  });
-});
+};
 
 // @desc    Delete a project
 // @route   DELETE /api/projects/:id
 // @access  Private
-export const deleteProject = asyncHandler(async (req: Request, res: Response) => {
-  const project = await Project.findById(req.params.id);
-  
-  if (!project) {
-    res.status(404);
-    throw new Error('Project not found');
-  }
-  
-  // Check if user owns the project or is admin
-  if (project.user && project.user.toString() !== req.user?._id.toString() && req.user?.role !== 'admin') {
-    res.status(403);
-    throw new Error('User not authorized to delete this project');
-  }
-  
-  // Delete image if exists
-  if (project.fabricImage) {
-    const imagePath = path.join(__dirname, '..', '..', 'public', project.fabricImage);
-    if (fs.existsSync(imagePath)) {
-      fs.unlinkSync(imagePath);
+export const deleteProject = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const project = await Project.findById(req.params.id);
+    
+    if (!project) {
+      res.status(404).json({
+        success: false,
+        message: 'Project not found'
+      });
+      return;
     }
+    
+    // Check if user owns the project or is admin
+    if (project.user && project.user.toString() !== req.user?._id.toString() && req.user?.role !== 'admin') {
+      res.status(403).json({
+        success: false,
+        message: 'User not authorized to delete this project'
+      });
+      return;
+    }
+    
+    // Delete image from Cloudinary if exists
+    if (project.fabricImage) {
+      const publicId = project.fabricImage.split('/').pop()?.split('.')[0];
+      if (publicId) {
+        await cloudinary.uploader.destroy(`shatika/${publicId}`);
+      }
+    }
+    
+    await Project.findByIdAndDelete(req.params.id);
+    
+    res.status(200).json({
+      success: true,
+      data: {}
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting project',
+      error: error.message
+    });
   }
-  
-  await Project.findByIdAndDelete(req.params.id);
-  
-  res.status(200).json({
-    success: true,
-    data: {}
-  });
-});
+};
 
 // Get project by ID
 export const getProjectById = async (req: Request, res: Response) => {
