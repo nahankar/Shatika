@@ -3,7 +3,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import path from 'path';
 import fs from 'fs';
-import multer from 'multer';
+import fileUpload from 'express-fileupload';
 import { protect, restrictTo } from './middleware/authMiddleware';
 
 // Import routes
@@ -32,6 +32,17 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
+
+// Configure express-fileupload
+app.use(fileUpload({
+  useTempFiles: true,
+  tempFileDir: '/tmp/',
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max file size
+  abortOnLimit: true,
+  responseOnLimit: 'File size limit has been reached (50MB)',
+  createParentPath: true,
+  debug: process.env.NODE_ENV === 'development',
+}));
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), 'uploads');
@@ -62,21 +73,13 @@ app.use('/api/v1/admin/dashboard', protect, restrictTo('admin'));
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Error:', err);
 
-  // Handle Multer errors
-  if (err instanceof multer.MulterError) {
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      res.status(400).json({
-        success: false,
-        message: 'File too large',
-        error: 'File size should be less than 5MB'
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        message: 'File upload error',
-        error: err.message
-      });
-    }
+  // Handle file upload errors
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    res.status(400).json({
+      success: false,
+      message: 'File too large',
+      error: 'File size should be less than 50MB'
+    });
     return;
   }
 
