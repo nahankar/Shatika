@@ -52,9 +52,6 @@ const artSchema = new Schema<IArt>(
   }
 );
 
-// Add index for better query performance
-artSchema.index({ name: 1 });
-
 // Virtual for products using this art
 artSchema.virtual('products', {
   ref: 'Product',
