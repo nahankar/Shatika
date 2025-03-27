@@ -2617,7 +2617,6 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
         }}
       >
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <IconButton size="small" onClick={handleDeleteSelected}><DeleteIcon /></IconButton>
           <IconButton size="small" onClick={handleReset}><ResetIcon /></IconButton>
         </Box>
 
@@ -2637,12 +2636,6 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
         </Box>
 
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <IconButton 
-            size="small" 
-            onClick={() => setIsFavorite(!isFavorite)}
-          >
-            <FavoriteIcon color={isFavorite ? 'error' : 'inherit'} />
-          </IconButton>
           <IconButton size="small" onClick={handleSave}>
             <SaveIcon />
           </IconButton>
