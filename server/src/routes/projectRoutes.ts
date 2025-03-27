@@ -10,13 +10,14 @@ import { protect } from '../middleware/authMiddleware';
 
 const router = express.Router();
 
-// Public routes
+// All routes are protected
+router.use(protect);
+
+// Project routes
 router.get('/', getProjects);
 router.get('/:id', getProject);
-
-// Protected routes
-router.post('/', protect, createProject);
-router.patch('/:id', protect, updateProject);
-router.delete('/:id', protect, deleteProject);
+router.post('/', createProject);
+router.patch('/:id', updateProject);
+router.delete('/:id', deleteProject);
 
 export default router; 

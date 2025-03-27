@@ -5,10 +5,10 @@ import cloudinary from '../config/cloudinary';
 
 // @desc    Get all projects
 // @route   GET /api/projects
-// @access  Public
-export const getProjects = async (_req: Request, res: Response): Promise<void> => {
+// @access  Private
+export const getProjects = async (req: Request, res: Response): Promise<void> => {
   try {
-    const projects = await Project.find().sort({ createdAt: -1 });
+    const projects = await Project.find({ user: req.user._id }).sort({ createdAt: -1 });
     
     res.status(200).json({
       success: true,
@@ -26,7 +26,7 @@ export const getProjects = async (_req: Request, res: Response): Promise<void> =
 
 // @desc    Get a single project
 // @route   GET /api/projects/:id
-// @access  Public
+// @access  Private
 export const getProject = async (req: Request, res: Response): Promise<void> => {
   try {
     const project = await Project.findById(req.params.id)
@@ -37,6 +37,15 @@ export const getProject = async (req: Request, res: Response): Promise<void> => 
       res.status(404).json({
         success: false,
         message: 'Project not found'
+      });
+      return;
+    }
+
+    // Check if user owns the project or is admin
+    if (project.user.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+      res.status(403).json({
+        success: false,
+        message: 'Not authorized to access this project'
       });
       return;
     }
