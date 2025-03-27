@@ -27,6 +27,7 @@ import {
   Undo as UndoIcon,
   Redo as RedoIcon,
   Fullscreen as FullscreenIcon,
+  FullscreenExit as FullscreenExitIcon,
   GridOn as GridIcon,
   Star as FavoriteIcon,
   Save as SaveIcon,
@@ -985,12 +986,23 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
 
   // Toggle fullscreen
   const handleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
-      setIsFullscreen(true);
+    setIsFullscreen(!isFullscreen);
+    
+    // Toggle fullscreen mode
+    const element = document.documentElement;
+    
+    if (!isFullscreen) {
+      if (element.requestFullscreen) {
+        element.requestFullscreen();
+      }
+      // Add a class to the body to hide navbar and other elements
+      document.body.classList.add('diy-fullscreen-mode');
     } else {
-      document.exitFullscreen();
-      setIsFullscreen(false);
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+      // Remove the class when exiting fullscreen
+      document.body.classList.remove('diy-fullscreen-mode');
     }
   };
 
@@ -2535,382 +2547,463 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
     }
   }, [selectedMaterialId, productCategory, diyProducts, selectedCarouselProduct]);
 
-  return (
-    <Box sx={{ 
-      height: '100vh', 
-      display: 'flex', 
-      flexDirection: 'column',
-      px: 3,
-      py: 2,
-    }}>
-      {/* Project Info Row */}
-      <Box sx={{ 
-        display: 'flex', 
-        gap: 2, 
-        mb: 2,
-      }}>
-        <TextField
-          fullWidth
-          label="Project Name"
-          variant="outlined"
-          size="small"
-          value={projectName}
-          onChange={(e) => setProjectName(e.target.value)}
-        />
-        <TextField
-          fullWidth
-          label="Description"
-          variant="outlined"
-          size="small"
-          value={projectDescription}
-          onChange={(e) => setProjectDescription(e.target.value)}
-        />
-        <TextField
-          fullWidth
-          id="product-category-field"
-          label="Product Category"
-          variant="outlined"
-          size="small"
-          value={productCategory ? getCategoryNameById(productCategory) : ""}
-          InputProps={{
-            readOnly: true,
-          }}
-          sx={{ mb: 1 }}
-        />
-        <FormControl 
-          fullWidth 
-          size="small"
-          sx={{ mb: 1 }}
-        >
-          <InputLabel>Fabric Material</InputLabel>
-          <Select
-            value={fabricCategory}
-            onChange={handleMaterialChange}
-            label="Fabric Material"
-            MenuProps={{ 
-              style: { maxHeight: '300px' } 
-            }}
-          >
-            {/* Use filteredMaterials or fallback to all materials if empty */}
-            {(filteredMaterials.length > 0 ? filteredMaterials : materials).map(material => (
-              <MenuItem key={material._id} value={material.name}>
-                {material.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Box>
+  // First, add a new state for design panel collapse
+  const [designPanelCollapsed, setDesignPanelCollapsed] = useState(false);
 
-      {/* Toolbar */}
-      <Paper 
-        elevation={0}
-        sx={{ 
-          bgcolor: '#e3e8ed',
-          display: 'flex',
-          alignItems: 'center',
-          py: 0.5,
-          px: 1.5,
-          borderTop: '1px solid #ccc',
-          borderBottom: '1px solid #ccc',
-          mb: 0,
-          width: '280px', // Match width of search design box
-        }}
-      >
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <IconButton size="small" sx={{ p: 0.5 }} onClick={handleReset}><ResetIcon fontSize="small" /></IconButton>
-          <IconButton size="small" sx={{ p: 0.5 }} onClick={handleUndo} disabled={undoStack.length === 0}>
-            <UndoIcon fontSize="small" />
-          </IconButton>
-          <IconButton size="small" sx={{ p: 0.5 }} onClick={handleRedo} disabled={redoStack.length === 0}>
-            <RedoIcon fontSize="small" />
-          </IconButton>
-          <IconButton size="small" sx={{ p: 0.5 }} onClick={handleFullscreen}>
-            <FullscreenIcon fontSize="small" />
-          </IconButton>
-          <IconButton size="small" sx={{ p: 0.5 }} onClick={() => setIsGridVisible(!isGridVisible)}>
-            <GridIcon fontSize="small" color={isGridVisible ? 'primary' : 'inherit'} />
-          </IconButton>
-          <IconButton size="small" sx={{ p: 0.5 }} onClick={handleSave}>
-            <SaveIcon fontSize="small" />
-          </IconButton>
-          <IconButton 
-            size="small" 
-            sx={{ p: 0.5 }}
-            onClick={() => setIsLocked(!isLocked)}
-          >
-            <LockIcon fontSize="small" color={isLocked ? 'primary' : 'inherit'} />
-          </IconButton>
-          <IconButton size="small" sx={{ p: 0.5 }} onClick={handleAddToCart}>
-            <CartIcon fontSize="small" />
-          </IconButton>
+  // Add this at the beginning of the file, right after the imports
+  // Create a style element to inject the fullscreen CSS
+  useEffect(() => {
+    // Create a style element
+    const style = document.createElement('style');
+    style.id = 'diy-fullscreen-styles';
+    style.innerHTML = `
+      body.diy-fullscreen-mode nav {
+        display: none !important;
+      }
+      body.diy-fullscreen-mode .MuiToolbar-root {
+        display: none !important;
+      }
+      body.diy-fullscreen-mode .MuiAppBar-root {
+        display: none !important;
+      }
+      body.diy-fullscreen-mode header {
+        display: none !important;
+      }
+      .fullscreen-design-container {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        z-index: 9999 !important;
+        background-color: white !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+    `;
+    document.head.appendChild(style);
+
+    // Clean up on component unmount
+    return () => {
+      const styleElement = document.getElementById('diy-fullscreen-styles');
+      if (styleElement) {
+        document.head.removeChild(styleElement);
+      }
+      // Ensure we exit fullscreen and remove class when leaving the page
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      }
+      document.body.classList.remove('diy-fullscreen-mode');
+    };
+  }, []);
+
+  return (
+    <Box 
+      sx={{ 
+        p: 2,
+      }}
+      className={isFullscreen ? 'fullscreen-design-container' : ''}
+    >
+      {/* Project information fields - hidden in fullscreen mode */}
+      {!isFullscreen && (
+        <Box sx={{ display: 'flex', gap: 2, mb: 1, mt: 1 }}>
+          {/* Project Name */}
+          <TextField
+            label="Project Name"
+            variant="outlined"
+            size="small"
+            value={projectName}
+            onChange={(e) => setProjectName(e.target.value)}
+            sx={{ flex: 1 }}
+          />
+          
+          {/* Project Description */}
+          <TextField
+            label="Description"
+            variant="outlined"
+            size="small"
+            value={projectDescription}
+            onChange={(e) => setProjectDescription(e.target.value)}
+            sx={{ flex: 1 }}
+          />
+          
+          {/* Product Category dropdown */}
+          <FormControl variant="outlined" size="small" sx={{ flex: 1 }}>
+            <InputLabel id="product-category-label">Product Category</InputLabel>
+            <Select
+              labelId="product-category-label"
+              id="product-category-field"
+              value={productCategory || ''}
+              onChange={(e) => setProductCategory(e.target.value)}
+              label="Product Category"
+            >
+              <MenuItem value="">
+                <em>Select a category</em>
+              </MenuItem>
+              {categories.map((category) => (
+                <MenuItem key={category._id} value={category._id}>
+                  {category.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          
+          {/* Fabric Material dropdown */}
+          <FormControl variant="outlined" size="small" sx={{ flex: 1 }}>
+            <InputLabel id="fabric-material-label">Fabric Material</InputLabel>
+            <Select
+              labelId="fabric-material-label"
+              value={selectedMaterialId || ''}
+              onChange={handleMaterialChange}
+              label="Fabric Material"
+            >
+              <MenuItem value="">
+                <em>Select a material</em>
+              </MenuItem>
+              {filteredMaterials.map((material) => (
+                <MenuItem key={material._id} value={material._id}>
+                  {material.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </Box>
-      </Paper>
+      )}
 
       {/* Simplified Grid Layout with thumbnails positioned above body */}
       <Box sx={{ 
-        display: 'grid',
-        gridTemplateColumns: '280px 1fr', // Slightly narrower left column
-        gridTemplateRows: 'auto 1fr',
-        height: '75vh',
-        border: '1px solid #ccc',
-        borderTop: 'none',
-        position: 'relative',
-        overflow: 'hidden',
-        width: '95vw',
-        maxWidth: '1800px',
+        display: 'flex',
+        flexDirection: 'column',
+        height: isFullscreen ? '100vh' : '78vh',
+        width: isFullscreen ? '100vw' : '95vw',
+        maxWidth: isFullscreen ? 'none' : '1800px',
         marginLeft: 'auto',
         marginRight: 'auto',
+        position: 'relative',
+        overflow: 'hidden',
+        mt: isFullscreen ? 0 : 1,
       }}>
-        {/* Design Blocks - Takes full height on left column */}
+        {/* Top Row with toolbar and carousel side by side */}
         <Box sx={{ 
-          borderRight: '1px solid #ccc',
-          display: 'flex',
-          flexDirection: 'column',
-          overflowY: 'hidden', // Set to hidden since the inner content has overflow
-          gridRow: '1 / span 2', // Make it span both rows
-          height: '100%',
+          display: 'flex', 
+          width: '100%',
+          borderBottom: '1px solid #ccc',
         }}>
-          <Box sx={{ 
-          p: 1.5,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-            borderBottom: '1px solid #eee',
-            height: '60px', // Match the height of the carousel
-        }}>
-          <TextField
-            fullWidth
-            size="small"
-            placeholder="Search Design"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-                sx: { height: '36px' }, // Consistent height
+          {/* Toolbar - Left side, fixed width */}
+          <Paper 
+            elevation={0}
+            sx={{ 
+              bgcolor: '#e3e8ed',
+              display: 'flex',
+              alignItems: 'center',
+              py: 0.5,
+              px: 1.5,
+              width: designPanelCollapsed ? '40px' : '280px',
+              transition: 'width 0.3s ease',
             }}
-              sx={{ flex: 1 }}
-          />
-            <IconButton size="small">
-          <ChevronLeftIcon />
-            </IconButton>
-        </Box>
+          >
+            <Box sx={{ display: 'flex', gap: 0.5 }}>
+              <IconButton size="small" sx={{ p: 0.5 }} onClick={handleReset}><ResetIcon fontSize="small" /></IconButton>
+              <IconButton size="small" sx={{ p: 0.5 }} onClick={handleUndo} disabled={undoStack.length === 0}>
+                <UndoIcon fontSize="small" />
+              </IconButton>
+              <IconButton size="small" sx={{ p: 0.5 }} onClick={handleRedo} disabled={redoStack.length === 0}>
+                <RedoIcon fontSize="small" />
+              </IconButton>
+              <IconButton size="small" sx={{ p: 0.5 }} onClick={handleFullscreen}>
+                {isFullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
+              </IconButton>
+              <IconButton size="small" sx={{ p: 0.5 }} onClick={() => setIsGridVisible(!isGridVisible)}>
+                <GridIcon fontSize="small" color={isGridVisible ? 'primary' : 'inherit'} />
+              </IconButton>
+              <IconButton size="small" sx={{ p: 0.5 }} onClick={handleSave}>
+                <SaveIcon fontSize="small" />
+              </IconButton>
+              <IconButton 
+                size="small" 
+                sx={{ p: 0.5 }}
+                onClick={() => setIsLocked(!isLocked)}
+              >
+                <LockIcon fontSize="small" color={isLocked ? 'primary' : 'inherit'} />
+              </IconButton>
+              <IconButton size="small" sx={{ p: 0.5 }} onClick={handleAddToCart}>
+                <CartIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          </Paper>
 
-          {/* Remove the Design Blocks title */}
-          {renderDesignBlocks()}
-
-          {/* Color Palette */}
-        <Box sx={{ 
-          p: 1.5,
-            mt: 'auto',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-            borderTop: '1px solid #ccc',
-            height: '60px', // Consistent height
-        }}>
-          {colorPage > 0 && (
-            <IconButton 
-              size="small" 
-              onClick={() => setColorPage(prev => prev - 1)}
-            >
-              <ChevronLeftIcon sx={{ fontSize: '16px' }} />
-            </IconButton>
-          )}
+          {/* Carousel - Right side, flexible width */}
           <Box sx={{ 
-            display: 'grid',
-            gridTemplateColumns: 'repeat(6, 1fr)',
-            gap: 0.5,
+            height: '39px',
+            position: 'relative',
+            bgcolor: '#fce4ec',
+            display: 'flex',
+            alignItems: 'center',
+            px: 1.5,
             flex: 1,
           }}>
-            {colorPalette.map((color) => (
-              <Box
-                key={color}
-                onClick={() => setSelectedColor(color)}
-                sx={{
-                    height: '24px',
-                  bgcolor: color,
-                  cursor: 'pointer',
-                    border: selectedColor === color ? '2px solid #000' : '1px solid #ccc',
-                    borderRadius: '2px',
-                    transition: 'transform 0.15s',
-                    '&:hover': { 
-                      opacity: 0.9,
-                      transform: 'scale(1.1)',
-                    },
-                }}
-              />
-            ))}
-          </Box>
-          {colorPage < allColors.length - 1 && (
+            {/* Left Arrow - Fixed position */}
             <IconButton 
-              size="small" 
-              onClick={() => setColorPage(prev => prev + 1)}
+              onClick={handlePrevCarouselPage}
+              disabled={currentCarouselPage === 0 || diyProducts.length === 0}
+              sx={{ 
+                position: 'absolute',
+                left: 10,
+                zIndex: 10,
+              }}
             >
-              <ChevronRightIcon sx={{ fontSize: '16px' }} />
+              <ChevronLeftIcon />
             </IconButton>
-          )}
+            
+            {/* Rest of the carousel code */}
+            <Box sx={{ 
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              overflow: 'hidden',
+              position: 'relative',
+              px: 4,
+            }}>
+              {loadingProducts ? (
+                <Typography variant="body2">Loading products...</Typography>
+              ) : diyProducts.length === 0 ? (
+                <Box sx={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center',
+                  gap: 1 
+                }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                    No products with "Show in DIY" enabled found.
+                  </Typography>
+                  <Typography variant="caption" sx={{ fontSize: '10px', color: 'text.secondary' }}>
+                    Enable "Show in DIY" flag for products in Admin &gt; Catalog &gt; Products
+                  </Typography>
+                </Box>
+              ) : (
+                <Box sx={{
+                  display: 'flex',
+                  position: 'absolute',
+                  width: '100%',
+                  height: '100%',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: 2.5,
+                }}>
+                  {filteredCarouselProducts
+                    .slice(
+                      currentCarouselPage * thumbnailsPerPage, 
+                      (currentCarouselPage + 1) * thumbnailsPerPage
+                    )
+                    .map((product) => {
+                      const imageUrl = product.images && product.images.length > 0 
+                        ? (product.images[0].startsWith('http') 
+                            ? product.images[0] 
+                            : `http://localhost:5173${product.images[0].startsWith('/') ? product.images[0] : `/${product.images[0]}`}`)
+                        : '';
+                      
+                      // Get material info to display in the tooltip
+                      const materialInfo = product.material && typeof product.material === 'object' && 'name' in product.material ? product.material.name : 
+                                          product.material || 
+                                          product.materialType || 
+                                          (product.materials && product.materials.length > 0 ? 
+                                            (typeof product.materials[0] === 'object' && 'name' in product.materials[0] ? 
+                                              product.materials[0].name : 
+                                              typeof product.materials[0] === 'string' ? product.materials[0] : '') : '');
+                      
+                      return (
+                        <Box 
+                          key={product._id}
+                          onClick={() => handleProductSelect(product)}
+                          sx={{
+                            width: '120px',
+                            height: '40px',
+                            backgroundColor: '#f5f5f5',
+                            backgroundImage: imageUrl ? `url(${imageUrl})` : 'none',
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: '4px',
+                            boxShadow: selectedCarouselProduct === product._id 
+                              ? '0 0 0 3px #2196f3' 
+                              : '0 2px 4px rgba(0,0,0,0.1)',
+                            cursor: 'pointer',
+                            position: 'relative',
+                            overflow: 'hidden',
+                            flexShrink: 0,
+                            transition: 'transform 0.2s, box-shadow 0.2s',
+                            '&:hover': {
+                              transform: 'scale(1.15)',
+                              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                              zIndex: 5,
+                            }
+                          }}
+                        >
+                          {/* Dark overlay with product name */}
+                          <Box sx={{
+                            position: 'absolute',
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            backgroundColor: 'rgba(0,0,0,0.6)',
+                            padding: '2px 4px',
+                            color: 'white',
+                            fontSize: '10px',
+                            textAlign: 'center',
+                          }}>
+                            {product.name}
+                          </Box>
+                        </Box>
+                      );
+                    })}
+                </Box>
+              )}
+            </Box>
+            
+            {/* Right Arrow - Fixed position */}
+            <IconButton
+              onClick={handleNextCarouselPage}
+              disabled={currentCarouselPage >= Math.ceil(filteredCarouselProducts.length / thumbnailsPerPage) - 1 || diyProducts.length === 0}
+              sx={{ 
+                position: 'absolute',
+                right: 10,
+                zIndex: 10,
+              }}
+            >
+              <ChevronRightIcon />
+            </IconButton>
           </Box>
         </Box>
-
-        {/* Saree Thumbnails Carousel - Updated to use real product data */}
+        
+        {/* Main content area with design panel and canvas */}
         <Box sx={{ 
-          borderBottom: '1px solid #eee',
-          height: '60px',
-          position: 'relative',
-          bgcolor: '#fce4ec',
-          display: 'flex',
-          alignItems: 'center',
-          px: 1.5,
+          display: 'grid',
+          gridTemplateColumns: `${designPanelCollapsed ? '40px' : '280px'} 1fr`,
+          flex: 1,
+          border: '1px solid #ccc',
+          borderTop: 'none',
         }}>
-          {/* Left Arrow - Fixed position */}
-          <IconButton 
-            onClick={handlePrevCarouselPage}
-            disabled={currentCarouselPage === 0 || diyProducts.length === 0}
-            sx={{ 
-              position: 'absolute',
-              left: 10,
-              zIndex: 10,
-            }}
-          >
-            <ChevronLeftIcon />
-          </IconButton>
-          
-          {/* Thumbnails Container with Fixed Width */}
+          {/* Design Blocks Panel */}
           <Box sx={{ 
-            width: '100%',
-            height: '100%',
+            borderRight: '1px solid #ccc',
             display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            overflow: 'hidden',
-            position: 'relative',
-            px: 4,
+            flexDirection: 'column',
+            overflowY: 'hidden',
+            height: '100%',
+            transition: 'all 0.3s ease',
           }}>
-            {loadingProducts ? (
-              <Typography variant="body2">Loading products...</Typography>
-            ) : diyProducts.length === 0 ? (
-              <Box sx={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                alignItems: 'center',
-                gap: 1 
-              }}>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  No products with "Show in DIY" enabled found.
-                </Typography>
-                <Typography variant="caption" sx={{ fontSize: '10px', color: 'text.secondary' }}>
-                  Enable "Show in DIY" flag for products in Admin &gt; Catalog &gt; Products
-                </Typography>
-              </Box>
-            ) : (
-              <Box sx={{
-                display: 'flex',
-                position: 'absolute',
-                width: '100%',
-                height: '100%',
-                justifyContent: 'center',
-                alignItems: 'center',
-                gap: 2.5,
-              }}>
-                {/* Filter products based on showInDIY, category ID, and material ID */}
-                {filteredCarouselProducts
-                  .slice(
-                    currentCarouselPage * thumbnailsPerPage, 
-                    (currentCarouselPage + 1) * thumbnailsPerPage
-                  )
-                  .map((product) => {
-                    const imageUrl = product.images && product.images.length > 0 
-                      ? (product.images[0].startsWith('http') 
-                          ? product.images[0] 
-                          : `http://localhost:5173${product.images[0].startsWith('/') ? product.images[0] : `/${product.images[0]}`}`)
-                      : '';
-                    
-                    // Get material info to display in the tooltip
-                    const materialInfo = product.material && typeof product.material === 'object' && 'name' in product.material ? product.material.name : 
-                                        product.material || 
-                                        product.materialType || 
-                                        (product.materials && product.materials.length > 0 ? 
-                                          (typeof product.materials[0] === 'object' && 'name' in product.materials[0] ? 
-                                            product.materials[0].name : 
-                                            typeof product.materials[0] === 'string' ? product.materials[0] : '') : '');
-                    
-                    return (
-                      <Box 
-                        key={product._id}
-                        onClick={() => handleProductSelect(product)}
-                        title={`${product.name}${materialInfo ? ` - ${materialInfo}` : ''}`}
+            <Box sx={{ 
+              p: 1.5,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              borderBottom: '1px solid #eee',
+              height: '60px',
+            }}>
+              {designPanelCollapsed ? (
+                <IconButton size="small" onClick={() => setDesignPanelCollapsed(false)}>
+                  <ChevronRightIcon />
+                </IconButton>
+              ) : (
+                <>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="Search Design"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon fontSize="small" />
+                        </InputAdornment>
+                      ),
+                        sx: { height: '36px' },
+                    }}
+                      sx={{ flex: 1 }}
+                  />
+                  <IconButton size="small" onClick={() => setDesignPanelCollapsed(true)}>
+                    <ChevronLeftIcon />
+                  </IconButton>
+                </>
+              )}
+            </Box>
+
+            {/* Design elements and color palette */}
+            {!designPanelCollapsed && (
+              <>
+                {renderDesignBlocks()}
+
+                {/* Color Palette */}
+                <Box sx={{ 
+                  p: 1.5,
+                  mt: 'auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  borderTop: '1px solid #ccc',
+                  height: '60px', // Consistent height
+                }}>
+                  {colorPage > 0 && (
+                    <IconButton 
+                      size="small" 
+                      onClick={() => setColorPage(prev => prev - 1)}
+                    >
+                      <ChevronLeftIcon sx={{ fontSize: '16px' }} />
+                    </IconButton>
+                  )}
+                  <Box sx={{ 
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(6, 1fr)',
+                    gap: 0.5,
+                    flex: 1,
+                  }}>
+                    {colorPalette.map((color) => (
+                      <Box
+                        key={color}
+                        onClick={() => setSelectedColor(color)}
                         sx={{
-                          width: '120px',
-                          height: '40px',
-                          backgroundColor: '#f5f5f5',
-                          backgroundImage: imageUrl ? `url(${imageUrl})` : 'none',
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: '4px',
-                          boxShadow: selectedCarouselProduct === product._id 
-                            ? '0 0 0 3px #2196f3' 
-                            : '0 2px 4px rgba(0,0,0,0.1)',
+                          height: '24px',
+                          bgcolor: color,
                           cursor: 'pointer',
-                          position: 'relative',
-                          overflow: 'hidden',
-                          flexShrink: 0,
-                          transition: 'transform 0.2s, box-shadow 0.2s',
-                          '&:hover': {
-                            transform: 'scale(1.15)',
-                            boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-                            zIndex: 5,
-                          }
+                          border: selectedColor === color ? '2px solid #000' : '1px solid #ccc',
+                          borderRadius: '2px',
+                          transition: 'transform 0.15s',
+                          '&:hover': { 
+                            opacity: 0.9,
+                            transform: 'scale(1.1)',
+                          },
                         }}
-                      >
-                        {/* Dark overlay with product name */}
-                        <Box sx={{
-                          position: 'absolute',
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          backgroundColor: 'rgba(0,0,0,0.6)',
-                          padding: '2px 4px',
-                          color: 'white',
-                          fontSize: '10px',
-                          textAlign: 'center',
-                        }}>
-                          {product.name}
-                        </Box>
-                      </Box>
-                    );
-                  })}
-              </Box>
+                      />
+                    ))}
+                  </Box>
+                  {colorPage < allColors.length - 1 && (
+                    <IconButton 
+                      size="small" 
+                      onClick={() => setColorPage(prev => prev + 1)}
+                    >
+                      <ChevronRightIcon sx={{ fontSize: '16px' }} />
+                    </IconButton>
+                  )}
+                </Box>
+              </>
             )}
           </Box>
-          
-          {/* Right Arrow - Fixed position */}
-          <IconButton 
-            onClick={handleNextCarouselPage}
-            disabled={currentCarouselPage >= Math.ceil(diyProducts.length / thumbnailsPerPage) - 1 || diyProducts.length === 0}
-            sx={{ 
-              position: 'absolute',
-              right: 10,
-              zIndex: 10,
-            }}
-          >
-            <ChevronRightIcon />
-          </IconButton>
-        </Box>
 
-        {/* Body Area - Takes the bottom row of right column */}
-        <Box sx={{ 
-          p: 1.5,
-          position: 'relative',
-          width: '100%', // Ensure full width
-        }}>
-          {renderDraggableArea('Body')}
+          {/* Body Area - Takes the right column */}
+          <Box sx={{ 
+            p: 1.5,
+            position: 'relative',
+            width: '100%', // Ensure full width
+          }}>
+            {renderDraggableArea('Body')}
+          </Box>
         </Box>
       </Box>
       
