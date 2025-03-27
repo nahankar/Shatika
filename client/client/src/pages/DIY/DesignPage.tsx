@@ -2170,19 +2170,19 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
 
   // Handle material change in dropdown
   const handleMaterialChange = (event: SelectChangeEvent<string>) => {
-    const materialName = event.target.value;
-    console.log("Material changed to:", materialName);
-    setFabricCategory(materialName);
+    const materialId = event.target.value;
+    console.log("Material ID changed to:", materialId);
     
-    // Find the material ID for the selected material name
-    const material = materials.find(m => m.name === materialName);
+    // Find the material name for the selected material ID
+    const material = materials.find(m => m._id === materialId);
     if (material) {
-      console.log("Setting selected material ID:", material._id);
-      setSelectedMaterialId(material._id);
+      console.log("Setting selected material ID:", materialId);
+      console.log("Setting fabric category to:", material.name);
+      setSelectedMaterialId(materialId);
+      setFabricCategory(material.name);
       
-      // Instead of clearing the selected product right away, 
-      // check if any products in the carousel will match the new material
-      const productsWithNewMaterial = diyProducts.filter(product => {
+      // Find products that match the current category and this material
+      const matchingProducts = diyProducts.filter(product => {
         const productMaterialId = typeof product.material === 'object' && product.material?._id
           ? product.material._id
           : product.material;
@@ -2191,16 +2191,16 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
           ? product.category._id
           : product.category;
         
-        return productMaterialId === material._id && 
+        return productMaterialId === materialId && 
                productCategoryId === productCategory &&
                product.showInDIY === true;
       });
       
-      console.log(`Found ${productsWithNewMaterial.length} products with the new material`);
+      console.log(`Found ${matchingProducts.length} products with the new material`);
       
-      if (productsWithNewMaterial.length > 0) {
+      if (matchingProducts.length > 0) {
         // If we have products with this material, select the first one
-        const firstProduct = productsWithNewMaterial[0];
+        const firstProduct = matchingProducts[0];
         console.log("Auto-selecting product with new material:", firstProduct.name);
         
         // Set the selected carousel product
@@ -2223,7 +2223,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
         setFabricImage('');
       }
     } else {
-      console.warn("Could not find material with name:", materialName);
+      console.warn("Could not find material with ID:", materialId);
     }
   };
 
@@ -2403,7 +2403,13 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
       selectedCarouselProduct
     });
     
-    return diyProducts.filter(product => {
+    // If either category or material is not selected, return empty array
+    if (!productCategory || !selectedMaterialId) {
+      console.log("Category or material not selected, not showing any products");
+      return [];
+    }
+    
+    const filtered = diyProducts.filter(product => {
       // Extract product material ID
       const productMaterialId = product.material && typeof product.material === 'object' && product.material._id
         ? product.material._id 
@@ -2413,18 +2419,6 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
       const productCategoryId = product.category && typeof product.category === 'object' && product.category._id
         ? product.category._id
         : typeof product.category === 'string' ? product.category : '';
-      
-      // Log product details for debugging
-      console.log(`Filtering carousel product: ${product.name}`, {
-        id: product._id,
-        productCategoryId,
-        selectedCategoryId: productCategory,
-        categoryMatch: productCategoryId === productCategory,
-        productMaterialId,
-        selectedMaterialId,
-        materialMatch: productMaterialId === selectedMaterialId,
-        showInDIY: product.showInDIY
-      });
       
       // For products to show in the carousel, they must:
       // 1. Have showInDIY set to true
@@ -2440,7 +2434,10 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
       
       return shouldShow;
     });
-  }, [diyProducts, productCategory, selectedMaterialId, selectedCarouselProduct]);
+    
+    console.log(`Filtered ${filtered.length} products matching category and material`);
+    return filtered;
+  }, [diyProducts, productCategory, selectedMaterialId]);
 
   // Add this useEffect to log key state changes for debugging
   useEffect(() => {
@@ -2629,26 +2626,15 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
             sx={{ flex: 1 }}
           />
           
-          {/* Product Category dropdown */}
-          <FormControl variant="outlined" size="small" sx={{ flex: 1 }}>
-            <InputLabel id="product-category-label">Product Category</InputLabel>
-            <Select
-              labelId="product-category-label"
-              id="product-category-field"
-              value={productCategory || ''}
-              disabled={true}
-              label="Product Category"
-            >
-              <MenuItem value="">
-                <em>Select a category</em>
-              </MenuItem>
-              {categories.map((category) => (
-                <MenuItem key={category._id} value={category._id}>
-                  {category.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          {/* Product Category - now as text instead of dropdown */}
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+              Product Category
+            </Typography>
+            <Typography variant="body2" sx={{ fontWeight: 'medium', p: 1, border: '1px solid rgba(0, 0, 0, 0.23)', borderRadius: '4px' }}>
+              {getCategoryNameById(productCategory)}
+            </Typography>
+          </Box>
           
           {/* Fabric Material dropdown */}
           <FormControl variant="outlined" size="small" sx={{ flex: 1 }}>
@@ -2659,9 +2645,6 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
               onChange={handleMaterialChange}
               label="Fabric Material"
             >
-              <MenuItem value="">
-                <em>Select a material</em>
-              </MenuItem>
               {filteredMaterials.map((material) => (
                 <MenuItem key={material._id} value={material._id}>
                   {material.name}
