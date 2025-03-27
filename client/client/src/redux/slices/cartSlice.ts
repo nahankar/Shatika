@@ -19,6 +19,7 @@ export interface AddToCartPayload {
   productId: string;
   quantity: number;
   size?: string;
+  color?: string;
 }
 
 export const fetchCart = createAsyncThunk(

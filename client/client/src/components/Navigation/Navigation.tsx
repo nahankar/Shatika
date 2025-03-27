@@ -132,7 +132,7 @@ const Navigation: React.FC = () => {
         {hasChildren && (
           <Collapse in={isExpanded} timeout="auto" unmountOnExit>
             <List component="div" disablePadding>
-              {item.children.map((child) => renderMenuItem(child, level + 1))}
+              {item.children?.map((child) => renderMenuItem(child, level + 1))}
             </List>
           </Collapse>
         )}
