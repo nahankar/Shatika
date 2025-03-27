@@ -2636,7 +2636,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
               labelId="product-category-label"
               id="product-category-field"
               value={productCategory || ''}
-              onChange={(e) => setProductCategory(e.target.value)}
+              disabled={true}
               label="Product Category"
             >
               <MenuItem value="">
