@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
@@ -12,13 +12,11 @@ import {
   Menu,
   MenuItem,
   Avatar,
+  Tooltip,
 } from '@mui/material';
-import {
-  Menu as MenuIcon,
-  ShoppingCart as CartIcon,
-  Favorite as FavoriteIcon,
-  Person as PersonIcon,
-} from '@mui/icons-material';
+import MenuIcon from '@mui/icons-material/Menu';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import FavoriteIcon from '@mui/icons-material/Favorite';
 import { RootState, useAppDispatch } from '../../redux/store';
 import { selectIsAuthenticated, selectUser, logout } from '../../redux/slices/authSlice';
 import { selectCartTotalQuantity } from '../../redux/slices/cartSlice';
@@ -28,7 +26,6 @@ const Navbar = () => {
   const navigate = useNavigate();
   const isAuthenticated = useSelector(selectIsAuthenticated);
   const user = useSelector(selectUser);
-  const cartItems = useSelector((state: RootState) => state.cart.items);
   const favoriteItems = useSelector((state: RootState) => state.favorites.items);
   const cartQuantity = useSelector(selectCartTotalQuantity);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -90,7 +87,7 @@ const Navbar = () => {
 
               <IconButton color="inherit" component={Link} to="/cart">
                 <Badge badgeContent={cartQuantity} color="error">
-                  <CartIcon />
+                  <ShoppingCartIcon />
                 </Badge>
               </IconButton>
 

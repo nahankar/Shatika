@@ -10,7 +10,10 @@ export interface User {
   _id: string;
   name: string;
   email: string;
-  role: 'user' | 'admin';
+  role: string;
+  picture?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface AuthState {
@@ -82,7 +85,10 @@ export const adminLogin = createAsyncThunk(
         _id: user.id || user._id,
         name: user.name,
         email: user.email,
-        role: user.role as 'admin' | 'user'
+        role: user.role as string,
+        picture: user.picture,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
       };
 
       localStorage.setItem('token', token);

@@ -1,147 +1,98 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Typography, Card, CardContent, Divider, List, ListItem, ListItemText, CircularProgress, Alert, Grid, Chip, Stack } from '@mui/material';
-import { usersAPI, cartAPI, favoritesAPI } from '../../../services/api';
+import { Box, Typography, Card, CardContent, List, ListItem, ListItemText, CircularProgress, Alert, Grid } from '@mui/material';
 import { ShoppingCart, Favorite } from '@mui/icons-material';
+import { usersAPI } from '../../../services/api';
 
-interface CartProductObject {
+interface ProductBase {
   _id: string;
   name: string;
   price: number;
 }
 
-interface FavoriteProductObject {
-  _id: string;
-  name: string;
-}
-
-type CartProduct = string | CartProductObject;
-type FavoriteProduct = string | FavoriteProductObject;
-
-function isCartProductObject(product: CartProduct): product is CartProductObject {
-  return typeof product !== 'string' && product !== null && '_id' in product;
-}
-
-function isFavoriteProductObject(product: FavoriteProduct): product is FavoriteProductObject {
-  return typeof product !== 'string' && product !== null && '_id' in product;
-}
-
-interface RawUser {
-  id: string;
-  email: string;
-  name: string;
-  cart?: CartItem[];
-  favorites?: string[];
-}
-
-interface CartItem {
-  _id: string;
-  product: CartProduct;
+interface CartProduct extends ProductBase {
   quantity: number;
 }
 
+interface CartItem {
+  product: CartProduct | string;
+  quantity?: number;
+}
+
 interface FavoriteItem {
-  _id?: string;
-  product: FavoriteProduct;
+  product: ProductBase | string;
 }
 
 interface UserWithItems {
   _id: string;
-  id: string;
-  email: string;
   name: string;
+  email: string;
   cartItems: CartItem[];
   favorites: FavoriteItem[];
 }
 
-interface ProductStats {
-  _id: string;
-  name: string;
-  inCartCount: number;
-  inFavoritesCount: number;
-  usersWithInCart: Set<string>;
+interface DashboardStats {
+  totalUsers: number;
+  usersWithCartItems: Set<string>;
   usersWithInFavorites: Set<string>;
+}
+
+// Helper functions
+function isProductBase(product: any): product is ProductBase {
+  return typeof product === 'object' && product !== null && '_id' in product && 'name' in product;
 }
 
 const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [users, setUsers] = useState<UserWithItems[]>([]);
-  const [productStats, setProductStats] = useState<Map<string, ProductStats>>(new Map());
+  const [stats, setStats] = useState<DashboardStats>({
+    totalUsers: 0,
+    usersWithCartItems: new Set(),
+    usersWithInFavorites: new Set(),
+  });
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchUsers = async () => {
       try {
-        console.log('Fetching users data...');
-        const usersResponse = await usersAPI.getAll();
-        const rawUsers = usersResponse.data;
-        console.log('Raw users:', rawUsers);
-
-        if (!rawUsers.success || !Array.isArray(rawUsers.data)) {
-          throw new Error('Invalid users data format');
+        const rawUsers = await usersAPI.getAll();
+        
+        if (!rawUsers.data || !rawUsers.data.success) {
+          console.error('Failed to fetch users');
+          return;
         }
 
         // Fetch cart and favorites for each user
         const usersWithItems = await Promise.all(
-          rawUsers.data.map(async (user: RawUser) => {
-            console.log(`Fetching data for user ${user.name} with ID:`, {
-              userId: user.id,
-              userIdType: typeof user.id,
-              user: user
-            });
-
-            if (!user.id) {
+          rawUsers.data.data.map(async (user: UserWithItems) => {
+            if (!user._id) {
               console.error('Invalid user data:', user);
               return {
                 ...user,
-                _id: user.id,
                 cartItems: [],
                 favorites: []
               };
             }
 
             try {
-              // Validate and extract cart items
               let userCartItems: CartItem[] = [];
-              
-              // Use user's cart array directly
-              if (user.cart && Array.isArray(user.cart)) {
-                userCartItems = user.cart;
-                console.log('Using cart from user data:', {
-                  userId: user.id,
-                  name: user.name,
-                  cartItems: userCartItems
-                });
+              if (user.cartItems && Array.isArray(user.cartItems)) {
+                userCartItems = user.cartItems;
               }
 
-              // Validate and extract favorites
-              let userFavorites: string[] = [];
-              
-              // Use user's favorites array directly
+              let userFavorites: FavoriteItem[] = [];
               if (user.favorites && Array.isArray(user.favorites)) {
                 userFavorites = user.favorites;
-                console.log('Using favorites from user data:', {
-                  userId: user.id,
-                  name: user.name,
-                  favorites: userFavorites
-                });
               }
-
-              // Convert favorites array to FavoriteItem objects
-              const favoriteItems: FavoriteItem[] = userFavorites.map(productId => ({
-                product: productId
-              }));
 
               return {
                 ...user,
-                _id: user.id,
                 cartItems: userCartItems,
-                favorites: favoriteItems
+                favorites: userFavorites
               };
             } catch (error) {
               console.warn(`Error fetching data for user ${user.name}:`, error);
               return {
                 ...user,
-                _id: user.id,
                 cartItems: [],
                 favorites: []
               };
@@ -149,75 +100,33 @@ const Dashboard: React.FC = () => {
           })
         );
 
-        console.log('Users with items:', usersWithItems);
         setUsers(usersWithItems);
 
-        // Calculate product statistics
-        const stats = new Map<string, ProductStats>();
-        
-        usersWithItems.forEach((user: UserWithItems) => {
-          // Process cart items
-          user.cartItems.forEach((item: CartItem) => {
-            if (!item?.product?._id) {
-              console.warn('Invalid cart item:', item);
-              return;
-            }
-            
-            const productId = item.product._id;
-            if (!stats.has(productId)) {
-              stats.set(productId, {
-                _id: productId,
-                name: item.product.name,
-                inCartCount: 0,
-                inFavoritesCount: 0,
-                usersWithInCart: new Set(),
-                usersWithInFavorites: new Set()
-              });
-            }
-            const productStats = stats.get(productId)!;
-            if (!productStats.usersWithInCart.has(user._id)) {
-              productStats.inCartCount++;
-              productStats.usersWithInCart.add(user._id);
-            }
-          });
+        // Update stats
+        const newStats: DashboardStats = {
+          totalUsers: usersWithItems.length,
+          usersWithCartItems: new Set(
+            usersWithItems
+              .filter(user => user.cartItems && user.cartItems.length > 0)
+              .map(user => user._id)
+          ),
+          usersWithInFavorites: new Set(
+            usersWithItems
+              .filter(user => user.favorites && user.favorites.length > 0)
+              .map(user => user._id)
+          ),
+        };
 
-          // Process favorites
-          user.favorites.forEach((item: FavoriteItem) => {
-            if (!item?.product?._id) {
-              console.warn('Invalid favorite item:', item);
-              return;
-            }
-            
-            const productId = item.product._id;
-            if (!stats.has(productId)) {
-              stats.set(productId, {
-                _id: productId,
-                name: item.product.name,
-                inCartCount: 0,
-                inFavoritesCount: 0,
-                usersWithInCart: new Set(),
-                usersWithInFavorites: new Set()
-              });
-            }
-            const productStats = stats.get(productId)!;
-            if (!productStats.usersWithInFavorites.has(user._id)) {
-              productStats.inFavoritesCount++;
-              productStats.usersWithInFavorites.add(user._id);
-            }
-          });
-        });
-
-        console.log('Product statistics:', Array.from(stats.values()));
-        setProductStats(stats);
+        setStats(newStats);
         setLoading(false);
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error('Error fetching users:', error);
         setError(error instanceof Error ? error.message : 'An error occurred');
         setLoading(false);
       }
     };
 
-    fetchData();
+    fetchUsers();
   }, []);
 
   if (loading) {
@@ -247,77 +156,73 @@ const Dashboard: React.FC = () => {
       </Typography>
       <Grid container spacing={3}>
         {users.map(user => (
-          <Grid item xs={12} md={6} key={`user-${user.id || Math.random()}`}>
+          <Grid item xs={12} md={6} key={`user-${user._id}`}>
             <Card>
               <CardContent>
-                <Typography variant="h6">{user.name}</Typography>
-                <Typography color="textSecondary" gutterBottom>{user.email}</Typography>
-                
-                <Box sx={{ mt: 2 }}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <ShoppingCart fontSize="small" />
-                    <Typography variant="subtitle1">
-                      Cart Items ({user.cartItems.length})
-                    </Typography>
-                  </Stack>
-                  <List dense>
-                    {user.cartItems.map(item => {
-                      let displayInfo = {
-                        id: '',
-                        name: '',
-                        quantity: item.quantity
-                      };
+                <Typography variant="h6" gutterBottom>
+                  {user.name}
+                </Typography>
+                <Typography color="textSecondary" gutterBottom>
+                  {user.email}
+                </Typography>
 
-                      if (isCartProductObject(item.product)) {
-                        displayInfo.id = item.product._id;
-                        displayInfo.name = item.product.name;
-                      } else {
-                        displayInfo.id = item.product;
-                        displayInfo.name = `Product ID: ${item.product}`;
-                      }
-                      
-                      return (
-                        <ListItem key={`cart-${user.id}-${displayInfo.id}`}>
-                          <ListItemText
-                            primary={displayInfo.name}
-                            secondary={`Quantity: ${displayInfo.quantity}`}
-                          />
-                        </ListItem>
-                      );
-                    })}
-                  </List>
-                </Box>
+                {/* Cart Items */}
+                <Typography variant="subtitle1" sx={{ mt: 2, display: 'flex', alignItems: 'center' }}>
+                  <ShoppingCart sx={{ mr: 1 }} /> Cart Items
+                </Typography>
+                <List>
+                  {user.cartItems.map((item, index) => {
+                    const displayInfo = {
+                      id: '',
+                      name: '',
+                      quantity: item.quantity || 0
+                    };
 
-                <Box sx={{ mt: 2 }}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Favorite fontSize="small" />
-                    <Typography variant="subtitle1">
-                      Favorites ({user.favorites.length})
-                    </Typography>
-                  </Stack>
-                  <List dense>
-                    {user.favorites.map((item, index) => {
-                      let displayInfo = {
-                        id: '',
-                        name: ''
-                      };
+                    if (typeof item.product === 'string') {
+                      displayInfo.id = item.product;
+                      displayInfo.name = `Product ID: ${item.product}`;
+                    } else {
+                      displayInfo.id = item.product._id;
+                      displayInfo.name = item.product.name;
+                    }
 
-                      if (isFavoriteProductObject(item.product)) {
-                        displayInfo.id = item.product._id;
-                        displayInfo.name = item.product.name;
-                      } else {
-                        displayInfo.id = item.product;
-                        displayInfo.name = `Product ID: ${item.product}`;
-                      }
+                    return (
+                      <ListItem key={`cart-${user._id}-${displayInfo.id}`}>
+                        <ListItemText
+                          primary={displayInfo.name}
+                          secondary={`Quantity: ${displayInfo.quantity}`}
+                        />
+                      </ListItem>
+                    );
+                  })}
+                </List>
 
-                      return (
-                        <ListItem key={`favorite-${user.id}-${displayInfo.id || index}`}>
-                          <ListItemText primary={displayInfo.name} />
-                        </ListItem>
-                      );
-                    })}
-                  </List>
-                </Box>
+                {/* Favorites */}
+                <Typography variant="subtitle1" sx={{ mt: 2, display: 'flex', alignItems: 'center' }}>
+                  <Favorite sx={{ mr: 1 }} /> Favorites
+                </Typography>
+                <List>
+                  {user.favorites.map((item, index) => {
+                    const displayInfo = {
+                      id: '',
+                      name: ''
+                    };
+
+                    if (typeof item.product === 'string') {
+                      displayInfo.id = item.product;
+                      displayInfo.name = `Product ID: ${item.product}`;
+                    } else {
+                      displayInfo.id = item.product._id;
+                      displayInfo.name = item.product.name;
+                    }
+
+                    return (
+                      <ListItem key={`favorite-${user._id}-${displayInfo.id || index}`}>
+                        <ListItemText primary={displayInfo.name} />
+                      </ListItem>
+                    );
+                  })}
+                </List>
               </CardContent>
             </Card>
           </Grid>
@@ -325,32 +230,45 @@ const Dashboard: React.FC = () => {
       </Grid>
 
       <Typography variant="h5" sx={{ mt: 4 }} gutterBottom>
-        Product Statistics
+        Statistics
       </Typography>
       <Grid container spacing={3}>
-        {Array.from(productStats.values()).map(stats => (
-          <Grid item xs={12} md={4} key={`product-${stats._id}`}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>{stats.name}</Typography>
-                <Stack spacing={1}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <ShoppingCart fontSize="small" />
-                    <Typography>
-                      {stats.inCartCount} user{stats.inCartCount !== 1 ? 's' : ''}
-                    </Typography>
-                  </Stack>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Favorite fontSize="small" />
-                    <Typography>
-                      {stats.inFavoritesCount} user{stats.inFavoritesCount !== 1 ? 's' : ''}
-                    </Typography>
-                  </Stack>
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Total Users
+              </Typography>
+              <Typography>
+                {stats.totalUsers}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Users with Cart Items
+              </Typography>
+              <Typography>
+                {stats.usersWithCartItems.size}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Users with Favorites
+              </Typography>
+              <Typography>
+                {stats.usersWithInFavorites.size}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
       </Grid>
     </Box>
   );

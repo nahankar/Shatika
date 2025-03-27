@@ -15,9 +15,10 @@ const initialState: CartState = {
   error: null,
 };
 
-interface AddToCartPayload {
+export interface AddToCartPayload {
   productId: string;
   quantity: number;
+  size?: string;
 }
 
 export const fetchCart = createAsyncThunk(

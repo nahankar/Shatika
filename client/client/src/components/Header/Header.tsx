@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { Link as RouterLink } from 'react-router-dom';
 import {
@@ -13,11 +13,11 @@ import {
   Button,
   Tooltip,
   MenuItem,
-  Link,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import { RootState } from '../../redux/store';
+import { logout } from '../../redux/slices/authSlice';
 
 const pages = ['Sarees', 'Blouses', 'Clothing', 'Fabrics', 'Accessories'];
 const settings = ['Profile', 'Orders', 'Wishlist', 'Logout'];
