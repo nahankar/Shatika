@@ -117,9 +117,17 @@ const Home = () => {
               variant="outlined" 
               color="primary" 
               size="large"
-              onClick={() => navigate('/products')}
+              onClick={() => {
+                const isLoggedIn = !!localStorage.getItem('token');
+                if (isLoggedIn) {
+                  navigate('/diy');
+                } else {
+                  // Redirect to login with a return URL to DIY
+                  navigate('/login?returnUrl=/diy');
+                }
+              }}
             >
-              View Collections
+              Design It Yourself
             </Button>
           </Box>
         </Container>

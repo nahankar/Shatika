@@ -199,77 +199,66 @@ const DIYPage = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      {/* Header Section */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" gutterBottom>
+      {/* Header and Controls Section - Restructured */}
+      <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', width: '100%' }}>
+        <Typography variant="h4" sx={{ mr: 2 }}>
           DIY Projects
         </Typography>
-      </Box>
-
-      {/* Search and Filter Section */}
-      <Box sx={{ mb: 4, width: '100%' }}>
-        <Grid container spacing={2} alignItems="center" sx={{ width: '100%' }}>
-          <Grid item xs={12} md={5}>
-            <TextField
-              fullWidth
-              placeholder="Search projects..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              InputProps={{
-                startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-              }}
-              size="medium"
-              sx={{ height: '100%' }}
-            />
-          </Grid>
-          <Grid item xs={12} md={3}>
-            <FormControl fullWidth size="medium">
-              <InputLabel>Sort by</InputLabel>
-              <Select
-                value={sortBy}
-                label="Sort by"
-                onChange={(e) => setSortBy(e.target.value)}
-              >
-                <MenuItem value="newest">Newest First</MenuItem>
-                <MenuItem value="oldest">Oldest First</MenuItem>
-                <MenuItem value="name">Name</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={12} md={2}>
-            <Button
-              fullWidth
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleAddProject}
-              size="large"
-              sx={{ 
-                height: '56px', // Match height of MUI TextField/Select
-                textTransform: 'none'
-              }}
+        
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleAddProject}
+          size="medium"
+          sx={{ 
+            height: '40px',
+            textTransform: 'none',
+            mr: 2
+          }}
+        >
+          Add Project
+        </Button>
+        
+        <Box sx={{ display: 'flex', ml: 'auto', alignItems: 'center', gap: 2 }}>
+          <TextField
+            placeholder="Search projects..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            InputProps={{
+              startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+            }}
+            size="small"
+            sx={{ width: '250px' }}
+          />
+          
+          <FormControl size="small" sx={{ width: '150px' }}>
+            <InputLabel>Sort by</InputLabel>
+            <Select
+              value={sortBy}
+              label="Sort by"
+              onChange={(e) => setSortBy(e.target.value)}
             >
-              Add Project
-            </Button>
-          </Grid>
-          <Grid item xs={12} md={2}>
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', height: '56px' }}>
-              <ToggleButtonGroup
-                value={viewMode}
-                exclusive
-                onChange={handleViewModeChange}
-                aria-label="view mode"
-                sx={{ height: '100%' }}
-              >
-                <ToggleButton value="list" aria-label="list view" sx={{ height: '100%' }}>
-                  <ViewListIcon />
-                </ToggleButton>
-                <ToggleButton value="grid" aria-label="grid view" sx={{ height: '100%' }}>
-                  <ViewModuleIcon />
-                </ToggleButton>
-              </ToggleButtonGroup>
-            </Box>
-          </Grid>
-        </Grid>
+              <MenuItem value="newest">Newest First</MenuItem>
+              <MenuItem value="oldest">Oldest First</MenuItem>
+              <MenuItem value="name">Name</MenuItem>
+            </Select>
+          </FormControl>
+          
+          <ToggleButtonGroup
+            value={viewMode}
+            exclusive
+            onChange={handleViewModeChange}
+            aria-label="view mode"
+            size="small"
+          >
+            <ToggleButton value="list" aria-label="list view">
+              <ViewListIcon />
+            </ToggleButton>
+            <ToggleButton value="grid" aria-label="grid view">
+              <ViewModuleIcon />
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
       </Box>
 
       {/* Error Alert */}
