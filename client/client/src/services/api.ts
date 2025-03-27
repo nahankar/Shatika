@@ -17,7 +17,7 @@ interface ApiErrorResponse {
 
 // Create axios instance with base configuration
 const axiosInstance = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.DEV ? '/api' : (import.meta.env.VITE_API_URL || '/api'),
   withCredentials: true,
 });
 
