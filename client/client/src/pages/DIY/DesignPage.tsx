@@ -2626,15 +2626,17 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
             sx={{ flex: 1 }}
           />
           
-          {/* Product Category - now as text instead of dropdown */}
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
-              Product Category
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 'medium', p: 1, border: '1px solid rgba(0, 0, 0, 0.23)', borderRadius: '4px' }}>
-              {getCategoryNameById(productCategory)}
-            </Typography>
-          </Box>
+          {/* Product Category - using TextField for consistent styling */}
+          <TextField
+            label="Product Category"
+            variant="outlined"
+            size="small"
+            value={getCategoryNameById(productCategory)}
+            InputProps={{
+              readOnly: true,
+            }}
+            sx={{ flex: 1 }}
+          />
           
           {/* Fabric Material dropdown */}
           <FormControl variant="outlined" size="small" sx={{ flex: 1 }}>
