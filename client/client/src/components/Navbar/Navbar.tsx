@@ -69,11 +69,13 @@ const Navbar = () => {
           <Button color="inherit" component={Link} to="/products">
             Products
           </Button>
-          {isAuthenticated && (
-            <Button color="inherit" component={Link} to="/diy">
-              DIY
-            </Button>
-          )}
+          <Button 
+            color="inherit" 
+            component={Link} 
+            to={isAuthenticated ? "/diy" : "/login?returnUrl=/diy"}
+          >
+            DIY
+          </Button>
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center' }}>

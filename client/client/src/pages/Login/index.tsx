@@ -20,7 +20,12 @@ const Login = () => {
   const location = useLocation();
   const dispatch = useAppDispatch();
   const isAuthenticated = useSelector(selectIsAuthenticated);
-  const from = location.state?.from?.pathname || '/';
+  
+  // Check for returnUrl in query parameters or fall back to location state or home
+  const searchParams = new URLSearchParams(location.search);
+  const returnUrl = searchParams.get('returnUrl');
+  const from = returnUrl || location.state?.from?.pathname || '/';
+  
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [shouldNavigate, setShouldNavigate] = useState(false);
