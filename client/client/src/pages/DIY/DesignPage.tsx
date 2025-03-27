@@ -2111,7 +2111,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
     return (
       <Box className={styles.designBlocks} sx={{ 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(4, 1fr)', // Fixed 4 elements per row
+        gridTemplateColumns: 'repeat(3, 1fr)', // Changed from 4 to 3 elements per row
         gap: 1.5,
         p: 2,
         overflowY: 'auto',
@@ -2924,11 +2924,15 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
                           <SearchIcon fontSize="small" />
                         </InputAdornment>
                       ),
-                        sx: { height: '36px' },
+                      sx: { height: '36px' },
                     }}
-                      sx={{ flex: 1 }}
+                    sx={{ flex: 1 }}
                   />
-                  <IconButton size="small" onClick={() => setDesignPanelCollapsed(true)}>
+                  <IconButton 
+                    size="small" 
+                    onClick={() => setDesignPanelCollapsed(true)}
+                    sx={{ ml: 'auto' }} // Ensure button is pushed to the right
+                  >
                     <ChevronLeftIcon />
                   </IconButton>
                 </>
@@ -2960,16 +2964,18 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
                   )}
                   <Box sx={{ 
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(6, 1fr)',
+                    gridTemplateColumns: 'repeat(6, 1fr)', // Keep 6 colors per row
+                    gridTemplateRows: 'repeat(2, 1fr)', // 2 rows to display all colors
                     gap: 0.5,
                     flex: 1,
+                    height: '100%',
                   }}>
                     {colorPalette.map((color) => (
                       <Box
                         key={color}
                         onClick={() => setSelectedColor(color)}
                         sx={{
-                          height: '24px',
+                          height: '18px', // Slightly smaller to fit in the grid
                           bgcolor: color,
                           cursor: 'pointer',
                           border: selectedColor === color ? '2px solid #000' : '1px solid #ccc',
