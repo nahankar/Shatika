@@ -2607,46 +2607,41 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
         sx={{ 
           bgcolor: '#e3e8ed',
           display: 'flex',
-          justifyContent: 'space-between',
           alignItems: 'center',
           py: 0.5,
-          px: 2,
+          px: 1.5,
           borderTop: '1px solid #ccc',
           borderBottom: '1px solid #ccc',
           mb: 0,
+          width: '280px', // Match width of search design box
         }}
       >
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <IconButton size="small" onClick={handleReset}><ResetIcon /></IconButton>
-        </Box>
-
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <IconButton size="small" onClick={handleUndo} disabled={undoStack.length === 0}>
-            <UndoIcon />
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <IconButton size="small" sx={{ p: 0.5 }} onClick={handleReset}><ResetIcon fontSize="small" /></IconButton>
+          <IconButton size="small" sx={{ p: 0.5 }} onClick={handleUndo} disabled={undoStack.length === 0}>
+            <UndoIcon fontSize="small" />
           </IconButton>
-          <IconButton size="small" onClick={handleRedo} disabled={redoStack.length === 0}>
-            <RedoIcon />
+          <IconButton size="small" sx={{ p: 0.5 }} onClick={handleRedo} disabled={redoStack.length === 0}>
+            <RedoIcon fontSize="small" />
           </IconButton>
-          <IconButton size="small" onClick={handleFullscreen}>
-            <FullscreenIcon />
+          <IconButton size="small" sx={{ p: 0.5 }} onClick={handleFullscreen}>
+            <FullscreenIcon fontSize="small" />
           </IconButton>
-          <IconButton size="small" onClick={() => setIsGridVisible(!isGridVisible)}>
-            <GridIcon color={isGridVisible ? 'primary' : 'inherit'} />
+          <IconButton size="small" sx={{ p: 0.5 }} onClick={() => setIsGridVisible(!isGridVisible)}>
+            <GridIcon fontSize="small" color={isGridVisible ? 'primary' : 'inherit'} />
           </IconButton>
-        </Box>
-
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <IconButton size="small" onClick={handleSave}>
-            <SaveIcon />
+          <IconButton size="small" sx={{ p: 0.5 }} onClick={handleSave}>
+            <SaveIcon fontSize="small" />
           </IconButton>
           <IconButton 
             size="small" 
+            sx={{ p: 0.5 }}
             onClick={() => setIsLocked(!isLocked)}
           >
-            <LockIcon color={isLocked ? 'primary' : 'inherit'} />
+            <LockIcon fontSize="small" color={isLocked ? 'primary' : 'inherit'} />
           </IconButton>
-          <IconButton size="small" onClick={handleAddToCart}>
-            <CartIcon />
+          <IconButton size="small" sx={{ p: 0.5 }} onClick={handleAddToCart}>
+            <CartIcon fontSize="small" />
           </IconButton>
         </Box>
       </Paper>
