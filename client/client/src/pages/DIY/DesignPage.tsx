@@ -45,6 +45,7 @@ import {
 import styles from './DesignPage.module.css';
 import { designElementsAPI, projectsAPI, productsAPI, materialsAPI, categoriesAPI } from '../../services/api';
 import { SelectChangeEvent } from '@mui/material/Select';
+import html2canvas from 'html2canvas';
 
 interface Material {
   _id: string;
@@ -198,7 +199,10 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
   // Track the original product ID to detect changes
   const [originalProductId, setOriginalProductId] = useState<string | null>(null);
   
-  // Confirmation dialog for fabric changes
+  // Add state for project saving status
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Add state for fabric change confirmation
   const [showFabricChangeDialog, setShowFabricChangeDialog] = useState(false);
   const [pendingSaveAction, setPendingSaveAction] = useState(false);
 
@@ -999,7 +1003,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
       document.body.classList.add('diy-fullscreen-mode');
     } else {
       if (document.exitFullscreen) {
-        document.exitFullscreen();
+      document.exitFullscreen();
       }
       // Remove the class when exiting fullscreen
       document.body.classList.remove('diy-fullscreen-mode');
@@ -1180,15 +1184,114 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
     ))}
   </TextField>
 
+  // Add a function to capture design as thumbnail
+  const captureDesignThumbnail = async (): Promise<File | null> => {
+    try {
+      console.log('Attempting to capture design thumbnail...');
+      
+      // Find the design area using the ID format from renderDraggableArea
+      const designAreaElement = document.querySelector('[data-draggable-area="Body"]') || 
+                                document.querySelector('#design-area-body') ||
+                                document.querySelector('.draggableArea');
+      
+      if (!designAreaElement) {
+        console.error('Design area not found - cannot capture thumbnail');
+        return null;
+      }
+      
+      console.log('Design area found:', designAreaElement);
+      
+      // Use html2canvas to capture the element directly without any manipulation
+      // This should preserve exactly what is rendered on screen
+      const canvas = await html2canvas(designAreaElement as HTMLElement, {
+        logging: true,
+        backgroundColor: null, // Keep transparent background
+        scale: 1.5, // Higher resolution for better quality
+        useCORS: true,
+        allowTaint: true,
+        onclone: (document) => {
+          // Log all potential design areas in the cloned document for debugging
+          const areas = document.querySelectorAll('[data-draggable-area]');
+          console.log('Potential design areas found in clone:', areas.length);
+          areas.forEach((area, index) => {
+            console.log(`Area ${index}:`, area);
+          });
+        }
+      });
+      
+      // Create a smaller thumbnail from the captured canvas
+      const maxSize = 400; // Maximum dimension
+      
+      // Calculate new dimensions while preserving aspect ratio
+      let newWidth = canvas.width;
+      let newHeight = canvas.height;
+      
+      if (newWidth > newHeight) {
+        if (newWidth > maxSize) {
+          newHeight = (newHeight * maxSize) / newWidth;
+          newWidth = maxSize;
+        }
+      } else {
+        if (newHeight > maxSize) {
+          newWidth = (newWidth * maxSize) / newHeight;
+          newHeight = maxSize;
+        }
+      }
+      
+      // Create and size the thumbnail canvas
+      const thumbnailCanvas = document.createElement('canvas');
+      thumbnailCanvas.width = newWidth;
+      thumbnailCanvas.height = newHeight;
+      
+      // Draw with high quality 
+      const ctx = thumbnailCanvas.getContext('2d');
+      if (ctx) {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(canvas, 0, 0, newWidth, newHeight);
+      }
+      
+      // Convert to PNG to preserve transparency and colors exactly
+      const blob = await new Promise<Blob>((resolve) => {
+        thumbnailCanvas.toBlob((b: Blob | null) => {
+          if (b) resolve(b);
+          else {
+            console.error('Failed to convert canvas to blob');
+            resolve(new Blob([]));
+          }
+        }, 'image/png', 1.0); // Full quality PNG
+      });
+      
+      if (blob.size === 0) {
+        console.error('Generated blob is empty');
+        return null;
+      }
+      
+      console.log('Blob created with size:', blob.size, 'bytes');
+      
+      // Create a File from the blob
+      const file = new File([blob], 'design-thumbnail.png', { type: 'image/png' });
+      console.log('Thumbnail file created successfully');
+      
+      return file;
+    } catch (error) {
+      console.error('Error capturing design thumbnail:', error);
+      return null;
+    }
+  };
+
   // Update the saveProjectWithCurrentFabric function to save category ID
   const saveProjectWithCurrentFabric = async () => {
     try {
+      setIsSaving(true); // Set saving state to true at the start
+      
       if (!projectId) {
         setSnackbar({
           open: true,
           message: 'Cannot save: Project ID is missing',
           severity: 'error',
         });
+        setIsSaving(false); // Set saving to false on error
         return;
       }
 
@@ -1215,8 +1318,8 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
       const formData = new FormData();
       
       // Add updated project information
-      formData.append('name', projectName);
-      formData.append('description', projectDescription);
+      formData.append('name', projectName || '1');
+      formData.append('description', projectDescription || '1');
       
       // Use productCategory for fabricCategory field (proper category value)
       // Make sure we're using the ID, not the display name
@@ -1247,54 +1350,107 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
       formData.append('designData', designJson);
       console.log('Design data being saved:', designJson);
       
-      // Send the update request to the API
-      const response = await projectsAPI.update(projectId, formData);
+      // Try to capture design thumbnail with error handling
+      try {
+        // Capture design thumbnail but limit the size
+        const thumbnailFile = await captureDesignThumbnail();
+        console.log('Thumbnail file captured:', thumbnailFile ? 'Yes' : 'No');
+        
+        // Add the design thumbnail if captured successfully
+        if (thumbnailFile) {
+          // Verify the file size is reasonable (under 2MB)
+          if (thumbnailFile.size < 2 * 1024 * 1024) {
+            formData.append('designThumbnail', thumbnailFile);
+            console.log('Thumbnail file added to form data, size:', thumbnailFile.size, 'bytes');
+          } else {
+            console.warn('Thumbnail file too large, not including it:', thumbnailFile.size, 'bytes');
+            setSnackbar({
+              open: true,
+              message: 'Thumbnail too large, saving without thumbnail',
+              severity: 'warning',
+            });
+          }
+        }
+      } catch (thumbnailError) {
+        console.error('Error capturing thumbnail:', thumbnailError);
+        // Continue with save without the thumbnail
+      }
       
-      if (response.data && response.data.success) {
-        // Show success message
+      // Send the update request to the API
+      try {
+        const response = await projectsAPI.update(projectId, formData);
+        
+        if (response.data && response.data.success) {
+          // Show success message
+          setSnackbar({
+            open: true,
+            message: 'Project saved successfully!',
+            severity: 'success',
+          });
+          console.log('Project saved successfully:', response.data);
+        } else {
+          setSnackbar({
+            open: true,
+            message: 'Failed to save project: ' + (response.data?.message || 'Unknown error'),
+            severity: 'error',
+          });
+          console.error('Failed to save project:', response.data);
+        }
+      } catch (apiError: any) {
+        console.error('API error saving project:', apiError);
         setSnackbar({
           open: true,
-          message: 'Project saved successfully!',
-          severity: 'success',
-        });
-        console.log('Project saved successfully:', response.data);
-      } else {
-        setSnackbar({
-          open: true,
-          message: 'Failed to save project',
+          message: `Server error: ${apiError.response?.status || ''} ${apiError.response?.data?.message || apiError.message || 'Unknown error'}`,
           severity: 'error',
         });
-        console.error('Failed to save project:', response.data);
       }
-    } catch (error) {
+      
+      // Set saving to false regardless of success or failure
+      setIsSaving(false);
+    } catch (error: any) {
+      console.error('Error saving project:', error);
       setSnackbar({
         open: true,
-        message: 'Error saving project',
+        message: `Error saving project: ${error.message || 'Unknown error'}`,
         severity: 'error',
       });
-      console.error('Error saving project:', error);
+      setIsSaving(false); // Make sure to set saving to false on error
     }
   };
 
-  // Modified handleSave to check for fabric changes
+  // Update how handleSave is called to ensure it shows loading indicator
   const handleSave = async () => {
     // Check if the fabric has changed from the original
     const fabricChanged = selectedCarouselProduct && originalProductId && 
       selectedCarouselProduct !== originalProductId;
-    
+
     console.log("Checking fabric change:", {
       originalProductId,
       selectedCarouselProduct,
       fabricChanged
     });
     
-    if (fabricChanged) {
-      // Show confirmation dialog
-      setPendingSaveAction(true);
-      setShowFabricChangeDialog(true);
-    } else {
-      // No fabric change, proceed with save
-      await saveProjectWithCurrentFabric();
+    try {
+      // Set saving state to true immediately to prevent further interactions
+      setIsSaving(true);
+      
+      if (fabricChanged) {
+        // Show confirmation dialog
+        setPendingSaveAction(true);
+        setShowFabricChangeDialog(true);
+        // Don't set isSaving to false here, as we'll do it in saveProjectWithCurrentFabric or when dialog is closed
+      } else {
+        // No fabric change, proceed with save
+        await saveProjectWithCurrentFabric();
+      }
+    } catch (error) {
+      console.error('Error in save handler:', error);
+      setIsSaving(false);
+      setSnackbar({
+        open: true,
+        message: 'An error occurred while saving',
+        severity: 'error',
+      });
     }
   };
 
@@ -1490,6 +1646,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
       <Box
         className={styles.draggableArea}
         data-draggable-area={areaName}
+        id={`design-area-${areaName.toLowerCase()}`}
         onClick={handleBackgroundClick}
         sx={{
           width: '100%',
@@ -1512,7 +1669,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
               right: 0,
               bottom: 0,
               backgroundImage: 'linear-gradient(to right, rgba(221, 221, 221, 0.7) 1px, transparent 1px), linear-gradient(to bottom, rgba(221, 221, 221, 0.7) 1px, transparent 1px)',
-            backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
+              backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
               pointerEvents: 'none',
               zIndex: 2,
             }
@@ -2596,6 +2753,46 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
     };
   }, []);
 
+  // First, let's add a loading overlay component at the end of the DesignPage.tsx file, just before the return statement but after all other elements
+
+  // Loading overlay component to prevent interactions during save
+  const LoadingOverlay = () => {
+  return (
+      <Box
+        sx={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(255, 255, 255, 0.7)',
+          zIndex: 9999,
+      display: 'flex', 
+      flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <CircularProgress size={60} />
+        <Typography variant="h6" sx={{ mt: 2 }}>
+          Saving project...
+        </Typography>
+        <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
+          Please wait while your design is being saved
+        </Typography>
+      </Box>
+    );
+  };
+
+  // Now, let's add the LoadingOverlay to the main component's return statement, just before the closing </Box>
+
+  // Add this right before the final closing tag in the return statement
+  {isSaving && <LoadingOverlay />}
+
+  // Now, let's update saveProjectWithCurrentFabric to make sure it properly sets isSaving state
+
+  // Finally, let's update handleSave to also set isSaving state when showing the confirmation dialog
+
   return (
     <Box 
       sx={{ 
@@ -2607,30 +2804,30 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
       {!isFullscreen && (
         <Box sx={{ display: 'flex', gap: 2, mb: 1, mt: 1 }}>
           {/* Project Name */}
-          <TextField
+        <TextField
             label="Project Name"
-            variant="outlined"
-            size="small"
+          variant="outlined"
+          size="small"
             value={projectName}
             onChange={(e) => setProjectName(e.target.value)}
             sx={{ flex: 1 }}
-          />
+        />
           
           {/* Project Description */}
-          <TextField
+        <TextField
             label="Description"
-            variant="outlined"
-            size="small"
+          variant="outlined"
+          size="small"
             value={projectDescription}
             onChange={(e) => setProjectDescription(e.target.value)}
             sx={{ flex: 1 }}
-          />
+        />
           
           {/* Product Category - using TextField for consistent styling */}
-          <TextField
+        <TextField
             label="Product Category"
-            variant="outlined"
-            size="small"
+          variant="outlined"
+          size="small"
             value={getCategoryNameById(productCategory)}
             InputProps={{
               readOnly: true,
@@ -2654,7 +2851,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
               ))}
             </Select>
           </FormControl>
-        </Box>
+      </Box>
       )}
 
       {/* Simplified Grid Layout with thumbnails positioned above body */}
@@ -2677,13 +2874,13 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
           borderBottom: '1px solid #ccc',
         }}>
           {/* Toolbar - Left side, fixed width */}
-          <Paper 
-            elevation={0}
-            sx={{ 
-              bgcolor: '#e3e8ed',
-              display: 'flex',
-              alignItems: 'center',
-              py: 0.5,
+      <Paper 
+        elevation={0}
+        sx={{ 
+          bgcolor: '#e3e8ed',
+          display: 'flex',
+          alignItems: 'center',
+          py: 0.5,
               px: 1.5,
               width: designPanelCollapsed ? '40px' : '280px',
               transition: 'width 0.3s ease',
@@ -2693,29 +2890,29 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
               <IconButton size="small" sx={{ p: 0.5 }} onClick={handleReset}><ResetIcon fontSize="small" /></IconButton>
               <IconButton size="small" sx={{ p: 0.5 }} onClick={handleUndo} disabled={undoStack.length === 0}>
                 <UndoIcon fontSize="small" />
-              </IconButton>
+          </IconButton>
               <IconButton size="small" sx={{ p: 0.5 }} onClick={handleRedo} disabled={redoStack.length === 0}>
                 <RedoIcon fontSize="small" />
-              </IconButton>
+          </IconButton>
               <IconButton size="small" sx={{ p: 0.5 }} onClick={handleFullscreen}>
                 {isFullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
-              </IconButton>
+          </IconButton>
               <IconButton size="small" sx={{ p: 0.5 }} onClick={() => setIsGridVisible(!isGridVisible)}>
                 <GridIcon fontSize="small" color={isGridVisible ? 'primary' : 'inherit'} />
-              </IconButton>
+          </IconButton>
               <IconButton size="small" sx={{ p: 0.5 }} onClick={handleSave}>
                 <SaveIcon fontSize="small" />
-              </IconButton>
-              <IconButton 
-                size="small" 
+          </IconButton>
+          <IconButton 
+            size="small" 
                 sx={{ p: 0.5 }}
                 onClick={() => setIsLocked(!isLocked)}
-              >
+          >
                 <LockIcon fontSize="small" color={isLocked ? 'primary' : 'inherit'} />
-              </IconButton>
+          </IconButton>
               <IconButton size="small" sx={{ p: 0.5 }} onClick={handleAddToCart}>
                 <CartIcon fontSize="small" />
-              </IconButton>
+          </IconButton>
             </Box>
           </Paper>
 
@@ -2730,7 +2927,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
             flex: 1,
           }}>
             {/* Left Arrow - Fixed position */}
-            <IconButton 
+          <IconButton 
               onClick={handlePrevCarouselPage}
               disabled={currentCarouselPage === 0 || diyProducts.length === 0}
               sx={{ 
@@ -2740,7 +2937,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
               }}
             >
               <ChevronLeftIcon />
-            </IconButton>
+          </IconButton>
             
             {/* Rest of the carousel code */}
             <Box sx={{ 
@@ -2862,21 +3059,21 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
               }}
             >
               <ChevronRightIcon />
-            </IconButton>
-          </Box>
+          </IconButton>
         </Box>
-        
+        </Box>
+
         {/* Main content area with design panel and canvas */}
-        <Box sx={{ 
-          display: 'grid',
+      <Box sx={{ 
+        display: 'grid',
           gridTemplateColumns: `${designPanelCollapsed ? '40px' : '280px'} 1fr`,
           flex: 1,
           border: '1px solid #ccc',
-          borderTop: 'none',
-        }}>
+        borderTop: 'none',
+      }}>
           {/* Design Blocks Panel */}
-          <Box sx={{ 
-            borderRight: '1px solid #ccc',
+        <Box sx={{ 
+          borderRight: '1px solid #ccc',
             display: 'flex',
             flexDirection: 'column',
             overflowY: 'hidden',
@@ -2884,10 +3081,10 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
             transition: 'all 0.3s ease',
           }}>
             <Box sx={{ 
-              p: 1.5,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
+          p: 1.5,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
               borderBottom: '1px solid #eee',
               height: '60px',
             }}>
@@ -2897,72 +3094,72 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
                 </IconButton>
               ) : (
                 <>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    placeholder="Search Design"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <SearchIcon fontSize="small" />
-                        </InputAdornment>
-                      ),
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Search Design"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
                       sx: { height: '36px' },
-                    }}
+            }}
                     sx={{ flex: 1 }}
-                  />
+          />
                   <IconButton 
                     size="small" 
                     onClick={() => setDesignPanelCollapsed(true)}
                     sx={{ ml: 'auto' }} // Ensure button is pushed to the right
                   >
-                    <ChevronLeftIcon />
+          <ChevronLeftIcon />
                   </IconButton>
                 </>
               )}
-            </Box>
+        </Box>
 
             {/* Design elements and color palette */}
             {!designPanelCollapsed && (
               <>
-                {renderDesignBlocks()}
+          {renderDesignBlocks()}
 
                 {/* Color Palette */}
-                <Box sx={{ 
-                  p: 1.5,
+        <Box sx={{ 
+          p: 1.5,
                   mt: 'auto',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
                   borderTop: '1px solid #ccc',
                   height: '60px', // Consistent height
-                }}>
-                  {colorPage > 0 && (
-                    <IconButton 
-                      size="small" 
-                      onClick={() => setColorPage(prev => prev - 1)}
-                    >
-                      <ChevronLeftIcon sx={{ fontSize: '16px' }} />
-                    </IconButton>
-                  )}
-                  <Box sx={{ 
-                    display: 'grid',
+        }}>
+          {colorPage > 0 && (
+            <IconButton 
+              size="small" 
+              onClick={() => setColorPage(prev => prev - 1)}
+            >
+              <ChevronLeftIcon sx={{ fontSize: '16px' }} />
+            </IconButton>
+          )}
+          <Box sx={{ 
+            display: 'grid',
                     gridTemplateColumns: 'repeat(6, 1fr)', // Keep 6 colors per row
                     gridTemplateRows: 'repeat(2, 1fr)', // 2 rows to display all colors
-                    gap: 0.5,
-                    flex: 1,
+            gap: 0.5,
+            flex: 1,
                     height: '100%',
-                  }}>
-                    {colorPalette.map((color) => (
-                      <Box
-                        key={color}
-                        onClick={() => setSelectedColor(color)}
-                        sx={{
+          }}>
+            {colorPalette.map((color) => (
+              <Box
+                key={color}
+                onClick={() => setSelectedColor(color)}
+                sx={{
                           height: '18px', // Slightly smaller to fit in the grid
-                          bgcolor: color,
-                          cursor: 'pointer',
+                  bgcolor: color,
+                  cursor: 'pointer',
                           border: selectedColor === color ? '2px solid #000' : '1px solid #ccc',
                           borderRadius: '2px',
                           transition: 'transform 0.15s',
@@ -2970,32 +3167,32 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
                             opacity: 0.9,
                             transform: 'scale(1.1)',
                           },
-                        }}
-                      />
-                    ))}
-                  </Box>
-                  {colorPage < allColors.length - 1 && (
-                    <IconButton 
-                      size="small" 
-                      onClick={() => setColorPage(prev => prev + 1)}
-                    >
-                      <ChevronRightIcon sx={{ fontSize: '16px' }} />
-                    </IconButton>
+                }}
+              />
+            ))}
+          </Box>
+          {colorPage < allColors.length - 1 && (
+            <IconButton 
+              size="small" 
+              onClick={() => setColorPage(prev => prev + 1)}
+            >
+              <ChevronRightIcon sx={{ fontSize: '16px' }} />
+            </IconButton>
                   )}
                 </Box>
               </>
-            )}
-          </Box>
+          )}
+        </Box>
 
           {/* Body Area - Takes the right column */}
-          <Box sx={{ 
-            p: 1.5,
-            position: 'relative',
+        <Box sx={{ 
+          p: 1.5,
+          position: 'relative',
             width: '100%', // Ensure full width
-          }}>
+        }}>
             {renderDraggableArea('Body')}
-          </Box>
         </Box>
+      </Box>
       </Box>
       
       {/* snackbar for notifications */}
@@ -3033,11 +3230,13 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
           <Button onClick={() => {
             setShowFabricChangeDialog(false);
             setPendingSaveAction(false);
+            setIsSaving(false); // Make sure to release the saving state if canceled
           }} color="primary">
             Cancel
           </Button>
           <Button onClick={() => {
             setShowFabricChangeDialog(false);
+            // Keep isSaving true as we'll proceed with save
             // Proceed with save using the new fabric
             if (pendingSaveAction) {
               saveProjectWithCurrentFabric();
@@ -3047,6 +3246,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
           </Button>
         </DialogActions>
       </Dialog>
+      {isSaving && <LoadingOverlay />}
     </Box>
   );
 };
