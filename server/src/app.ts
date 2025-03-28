@@ -18,6 +18,7 @@ import cartRoutes from './routes/cartRoutes';
 import authRoutes from './routes/auth';
 import designElementsRouter from './routes/designElements';
 import projectRoutes from './routes/projectRoutes';
+import thumbnailRoutes from './routes/thumbnailRoutes';
 
 const app = express();
 
@@ -65,6 +66,7 @@ app.use('/api/favorites', favoriteRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/design-elements', designElementsRouter);
 app.use('/api/projects', projectRoutes);
+app.use('/api/thumbnails', thumbnailRoutes);
 
 // Admin dashboard routes
 app.use('/api/v1/admin/dashboard', protect, restrictTo('admin'));

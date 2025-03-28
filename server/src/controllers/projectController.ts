@@ -68,39 +68,52 @@ export const getProject = async (req: Request, res: Response): Promise<void> => 
 // @access  Private
 export const createProject = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, description, fabricCategory, selectedProductId, materialId, materialName, designData } = req.body;
+    console.log('Create project route called');
+    console.log('Request body:', req.body);
+    console.log('Files present:', req.files ? Object.keys(req.files) : 'No files');
     
-    // Handle file upload if present
+    // Process file upload if present
     let fabricImage = '';
+    let designThumbnail = '';
+    
     if (req.files?.fabricImage && !Array.isArray(req.files.fabricImage)) {
+      console.log('Fabric image found in request');
       const file = req.files.fabricImage as UploadedFile;
       const result = await cloudinary.uploader.upload(file.tempFilePath, {
         folder: 'shatika',
         resource_type: 'auto',
       });
       fabricImage = result.secure_url;
+      console.log('Fabric image uploaded:', fabricImage);
     }
     
-    // Create the project with all available data
-    const newProject = new Project({
-      name,
-      description,
-      fabricCategory,
-      materialId,
-      materialName,
+    // Process design thumbnail if present
+    if (req.files?.designThumbnail && !Array.isArray(req.files.designThumbnail)) {
+      console.log('Design thumbnail found in request');
+      const file = req.files.designThumbnail as UploadedFile;
+      const result = await cloudinary.uploader.upload(file.tempFilePath, {
+        folder: 'shatika/thumbnails',
+        resource_type: 'auto',
+      });
+      designThumbnail = result.secure_url;
+      console.log('Design thumbnail uploaded:', designThumbnail);
+    }
+    
+    // Create new project with user ID from auth middleware
+    const project = await Project.create({
+      user: req.user?._id,
+      name: req.body.name,
+      description: req.body.description,
+      fabricCategory: req.body.fabricCategory,
+      materialId: req.body.materialId,
+      materialName: req.body.materialName,
+      designData: req.body.designData,
+      selectedProductId: req.body.selectedProductId,
       fabricImage,
-      designData,
-      user: req.user._id,
-      selectedProductId: selectedProductId || null,
+      designThumbnail
     });
     
-    // Save the project
-    const savedProject = await newProject.save();
-    
-    // Populate the selectedProduct field if it exists
-    const populatedProject = await Project.findById(savedProject._id)
-      .populate('selectedProductId')
-      .exec();
+    const populatedProject = await Project.findById(project._id).populate('selectedProductId');
     
     res.status(201).json({
       success: true,
@@ -121,6 +134,10 @@ export const createProject = async (req: Request, res: Response): Promise<void> 
 // @access  Private
 export const updateProject = async (req: Request, res: Response): Promise<void> => {
   try {
+    console.log('Update project route called:', req.params.id);
+    console.log('Request body:', req.body);
+    console.log('Files present:', req.files ? Object.keys(req.files) : 'No files');
+    
     let project = await Project.findById(req.params.id);
     
     if (!project) {
@@ -142,6 +159,7 @@ export const updateProject = async (req: Request, res: Response): Promise<void> 
     
     // Process file upload if present
     let fabricImage = project.fabricImage;
+    let designThumbnail = project.designThumbnail;
     
     if (req.files?.fabricImage && !Array.isArray(req.files.fabricImage)) {
       // Delete old image from Cloudinary if exists
@@ -160,6 +178,27 @@ export const updateProject = async (req: Request, res: Response): Promise<void> 
       fabricImage = result.secure_url;
     }
     
+    // Process design thumbnail if present
+    if (req.files?.designThumbnail && !Array.isArray(req.files.designThumbnail)) {
+      console.log('Design thumbnail file found in request');
+      // Delete old thumbnail from Cloudinary if exists
+      if (project.designThumbnail) {
+        const publicId = project.designThumbnail.split('/').pop()?.split('.')[0];
+        if (publicId) {
+          await cloudinary.uploader.destroy(`shatika/thumbnails/${publicId}`);
+        }
+      }
+      
+      const file = req.files.designThumbnail as UploadedFile;
+      console.log('Uploading design thumbnail to Cloudinary...');
+      const result = await cloudinary.uploader.upload(file.tempFilePath, {
+        folder: 'shatika/thumbnails',
+        resource_type: 'auto',
+      });
+      designThumbnail = result.secure_url;
+      console.log('Design thumbnail uploaded:', designThumbnail);
+    }
+    
     // Create update object with only the fields that are present
     const updateData: any = {};
     
@@ -172,6 +211,9 @@ export const updateProject = async (req: Request, res: Response): Promise<void> 
     if (req.body.designData) updateData.designData = req.body.designData;
     if (req.body.selectedProductId) updateData.selectedProductId = req.body.selectedProductId;
     if (fabricImage !== project.fabricImage) updateData.fabricImage = fabricImage;
+    if (designThumbnail !== project.designThumbnail) updateData.designThumbnail = designThumbnail;
+    
+    console.log('Update data:', updateData);
     
     // Update project with only the changed fields
     project = await Project.findByIdAndUpdate(

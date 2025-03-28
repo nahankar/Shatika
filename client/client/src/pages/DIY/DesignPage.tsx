@@ -45,7 +45,7 @@ import {
 import styles from './DesignPage.module.css';
 import { designElementsAPI, projectsAPI, productsAPI, materialsAPI, categoriesAPI } from '../../services/api';
 import { SelectChangeEvent } from '@mui/material/Select';
-import html2canvas from 'html2canvas';
+import axios from 'axios';
 
 interface Material {
   _id: string;
@@ -76,6 +76,7 @@ interface DesignShape {
   name: string;
   artType: string;
   isActive: boolean;
+  image?: string; // Add the image property
   render: (color: string) => React.ReactNode;
 }
 
@@ -172,7 +173,10 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
   const getImageUrl = (imagePath: string) => {
     if (!imagePath) return '';
     if (imagePath.startsWith('http')) return imagePath;
-    return `${API_URL}${imagePath}`;
+    
+    // Use API_URL with fallback to current host
+    const baseUrl = API_URL || window.location.origin;
+    return `${baseUrl}${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
   };
 
   const [snackbar, setSnackbar] = useState<{
@@ -195,6 +199,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
   const [projectName, setProjectName] = useState<string>('');
   const [projectDescription, setProjectDescription] = useState<string>('');
   const [fabricCategory, setFabricCategory] = useState<string>('');
+  const [productCategory, setProductCategory] = useState<string>('');
   
   // Track the original product ID to detect changes
   const [originalProductId, setOriginalProductId] = useState<string | null>(null);
@@ -560,7 +565,6 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
       console.log("Fetching design elements from API...");
       const response = await designElementsAPI.getAll();
       if (response.data && response.data.success) {
-        // Filter to only show elements that are active
         const elements = response.data.data
           .filter((element: any) => element.isActive !== false)
           .map((element: any) => ({
@@ -568,25 +572,26 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
           name: element.name,
           artType: element.artType,
           isActive: element.isActive,
+          image: element.image,
           render: (color: string) => {
-            // Use the most reliable approach for coloring SVGs
             const imageUrl = getImageUrl(element.image);
             return (
-              <div style={{ 
-                width: '100%', 
-                height: '100%', 
-                position: 'relative',
-                backgroundColor: color !== '#FFFFFF' ? color : '#000000',
-                WebkitMaskImage: `url(${imageUrl})`,
-                maskImage: `url(${imageUrl})`,
-                WebkitMaskSize: 'contain',
-                maskSize: 'contain',
-                WebkitMaskRepeat: 'no-repeat',
-                maskRepeat: 'no-repeat',
-                WebkitMaskPosition: 'center',
-                maskPosition: 'center',
-              }}>
-              </div>
+              <div
+                style={{
+                  width: '100%', 
+                  height: '100%', 
+                  position: 'relative',
+                  backgroundColor: color,
+                  WebkitMaskImage: `url(${imageUrl})`,
+                  maskImage: `url(${imageUrl})`,
+                  WebkitMaskSize: 'contain',
+                  maskSize: 'contain',
+                  WebkitMaskRepeat: 'no-repeat',
+                  maskRepeat: 'no-repeat',
+                  WebkitMaskPosition: 'center',
+                  maskPosition: 'center',
+                }}
+              />
             );
           }
         }));
@@ -1184,98 +1189,72 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
     ))}
   </TextField>
 
-  // Add a function to capture design as thumbnail
+  // Create thumbnail using the server-side puppeteer rendering
   const captureDesignThumbnail = async (): Promise<File | null> => {
     try {
-      console.log('Attempting to capture design thumbnail...');
+      console.log('Starting thumbnail capture using server-side rendering...');
       
-      // Find the design area using the ID format from renderDraggableArea
-      const designAreaElement = document.querySelector('[data-draggable-area="Body"]') || 
-                                document.querySelector('#design-area-body') ||
-                                document.querySelector('.draggableArea');
-      
-      if (!designAreaElement) {
-        console.error('Design area not found - cannot capture thumbnail');
-        return null;
-      }
-      
-      console.log('Design area found:', designAreaElement);
-      
-      // Use html2canvas to capture the element directly without any manipulation
-      // This should preserve exactly what is rendered on screen
-      const canvas = await html2canvas(designAreaElement as HTMLElement, {
-        logging: true,
-        backgroundColor: null, // Keep transparent background
-        scale: 1.5, // Higher resolution for better quality
-        useCORS: true,
-        allowTaint: true,
-        onclone: (document) => {
-          // Log all potential design areas in the cloned document for debugging
-          const areas = document.querySelectorAll('[data-draggable-area]');
-          console.log('Potential design areas found in clone:', areas.length);
-          areas.forEach((area, index) => {
-            console.log(`Area ${index}:`, area);
-          });
+      // Get current shapes
+      const [_, currentBodyShapes] = getShapeSetterForArea('Body');
+      console.log('Current body shapes:', currentBodyShapes);
+
+      // Process current body shapes to embed image URLs directly
+      const processedShapes = currentBodyShapes
+        .filter(shape => shape !== null)
+        .map(shape => ({
+          id: shape.id,
+          x: shape.x,
+          y: shape.y,
+          width: shape.width,
+          height: shape.height,
+          rotation: shape.rotation || 0,
+          color: shape.color,
+          image: shape.image,
+          cropSettings: shape.cropSettings
+        }));
+
+      // Create payload for the server API
+      const payload = {
+        designData: {
+          body: processedShapes
+        },
+        fabricImage: fabricImage
+      };
+
+      // Get auth token from localStorage
+      const token = localStorage.getItem('token');
+
+      // Make server-side thumbnail request with auth token
+      const response = await axios.post('/api/thumbnails/capture', payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         }
       });
-      
-      // Create a smaller thumbnail from the captured canvas
-      const maxSize = 400; // Maximum dimension
-      
-      // Calculate new dimensions while preserving aspect ratio
-      let newWidth = canvas.width;
-      let newHeight = canvas.height;
-      
-      if (newWidth > newHeight) {
-        if (newWidth > maxSize) {
-          newHeight = (newHeight * maxSize) / newWidth;
-          newWidth = maxSize;
+
+      if (response.data.success) {
+        // Convert base64 to File object
+        const base64Response = response.data.data.thumbnail;
+        const base64Data = base64Response.split(',')[1];
+        const byteCharacters = atob(base64Data);
+        const byteArrays = [];
+        
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteArrays.push(byteCharacters.charCodeAt(i));
         }
+        
+        const byteArray = new Uint8Array(byteArrays);
+        const blob = new Blob([byteArray], { type: 'image/png' });
+        
+        console.log('Thumbnail created with size:', blob.size, 'bytes');
+        const thumbnailFile = new File([blob], 'thumbnail.png', { type: 'image/png' });
+        return thumbnailFile;
       } else {
-        if (newHeight > maxSize) {
-          newWidth = (newWidth * maxSize) / newHeight;
-          newHeight = maxSize;
-        }
-      }
-      
-      // Create and size the thumbnail canvas
-      const thumbnailCanvas = document.createElement('canvas');
-      thumbnailCanvas.width = newWidth;
-      thumbnailCanvas.height = newHeight;
-      
-      // Draw with high quality 
-      const ctx = thumbnailCanvas.getContext('2d');
-      if (ctx) {
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(canvas, 0, 0, newWidth, newHeight);
-      }
-      
-      // Convert to PNG to preserve transparency and colors exactly
-      const blob = await new Promise<Blob>((resolve) => {
-        thumbnailCanvas.toBlob((b: Blob | null) => {
-          if (b) resolve(b);
-          else {
-            console.error('Failed to convert canvas to blob');
-            resolve(new Blob([]));
-          }
-        }, 'image/png', 1.0); // Full quality PNG
-      });
-      
-      if (blob.size === 0) {
-        console.error('Generated blob is empty');
+        console.warn('Failed to generate thumbnail, but continuing with save...');
         return null;
       }
-      
-      console.log('Blob created with size:', blob.size, 'bytes');
-      
-      // Create a File from the blob
-      const file = new File([blob], 'design-thumbnail.png', { type: 'image/png' });
-      console.log('Thumbnail file created successfully');
-      
-      return file;
     } catch (error) {
-      console.error('Error capturing design thumbnail:', error);
+      console.warn('Failed to generate thumbnail, but continuing with save...', error);
       return null;
     }
   };
@@ -1283,143 +1262,90 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
   // Update the saveProjectWithCurrentFabric function to save category ID
   const saveProjectWithCurrentFabric = async () => {
     try {
-      setIsSaving(true); // Set saving state to true at the start
+      setIsSaving(true); // Show loading overlay while saving
+      console.log('Saving project with new fabric...');
       
-      if (!projectId) {
-        setSnackbar({
-          open: true,
-          message: 'Cannot save: Project ID is missing',
-          severity: 'error',
-        });
-        setIsSaving(false); // Set saving to false on error
-        return;
+      // Wait for next render cycle before capturing thumbnail
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Capture the design as a thumbnail
+      console.log('Capturing thumbnail before save...');
+      const thumbnail = await captureDesignThumbnail();
+      
+      if (!thumbnail) {
+        console.warn('Failed to generate thumbnail, but continuing with save...');
+      } else {
+        console.log('Thumbnail generated successfully:', thumbnail.size, 'bytes');
       }
-
-    const design = {
-      body: bodyShapes,
-      isLocked,
-      isFavorite,
-    };
-
-      console.log(`Saving design with ${bodyShapes.length} body shapes`);
-      if (bodyShapes.length > 0) {
-        console.log('Sample shape data:', {
-          id: bodyShapes[0].id,
-          x: bodyShapes[0].x,
-          y: bodyShapes[0].y,
-          width: bodyShapes[0].width,
-          height: bodyShapes[0].height,
-          rotation: bodyShapes[0].rotation,
-          color: bodyShapes[0].color,
-        });
-      }
-
-      // Create a FormData object to send to the API
+      
+      // Create FormData for the API request
       const formData = new FormData();
       
-      // Add updated project information
-      formData.append('name', projectName || '1');
-      formData.append('description', projectDescription || '1');
-      
-      // Use productCategory for fabricCategory field (proper category value)
-      // Make sure we're using the ID, not the display name
-      formData.append('fabricCategory', productCategory || 'Fabric');
-      console.log('Saving with category ID:', productCategory || 'Fabric');
-      
-      // Add material name as a separate field
-      formData.append('materialName', fabricCategory || '');
-      console.log('Saving with material name:', fabricCategory || '');
-      
-      // Also include the material ID if available
-      if (selectedMaterialId) {
-        formData.append('materialId', selectedMaterialId);
-        console.log('Saving with material ID:', selectedMaterialId);
+      // Add the thumbnail if available
+      if (thumbnail) {
+        formData.append('designThumbnail', thumbnail);
       }
       
-      // Add the selected product ID if available
+      // Add project details
+      formData.append('name', projectName);
+      formData.append('description', projectDescription);
+      formData.append('designData', JSON.stringify({
+        body: bodyShapes
+      }));
+      
+      // Add fabric and category details
       if (selectedCarouselProduct) {
-        formData.append('selectedProductId', selectedCarouselProduct);
-        console.log('Saving with selected product ID:', selectedCarouselProduct);
-        
-        // Update the original product ID so future saves don't trigger the confirmation
-        setOriginalProductId(selectedCarouselProduct);
+        formData.append('productId', selectedCarouselProduct);
       }
       
-      // Add the design data as a JSON string
-      const designJson = JSON.stringify(design);
-      formData.append('designData', designJson);
-      console.log('Design data being saved:', designJson);
-      
-      // Try to capture design thumbnail with error handling
-      try {
-        // Capture design thumbnail but limit the size
-        const thumbnailFile = await captureDesignThumbnail();
-        console.log('Thumbnail file captured:', thumbnailFile ? 'Yes' : 'No');
-        
-        // Add the design thumbnail if captured successfully
-        if (thumbnailFile) {
-          // Verify the file size is reasonable (under 2MB)
-          if (thumbnailFile.size < 2 * 1024 * 1024) {
-            formData.append('designThumbnail', thumbnailFile);
-            console.log('Thumbnail file added to form data, size:', thumbnailFile.size, 'bytes');
-          } else {
-            console.warn('Thumbnail file too large, not including it:', thumbnailFile.size, 'bytes');
-            setSnackbar({
-              open: true,
-              message: 'Thumbnail too large, saving without thumbnail',
-              severity: 'warning',
-            });
-          }
-        }
-      } catch (thumbnailError) {
-        console.error('Error capturing thumbnail:', thumbnailError);
-        // Continue with save without the thumbnail
+      // Add category information from fabric category
+      if (fabricCategory) {
+        formData.append('category', fabricCategory);
       }
       
-      // Send the update request to the API
-      try {
-        const response = await projectsAPI.update(projectId, formData);
-        
-        if (response.data && response.data.success) {
-          // Show success message
-          setSnackbar({
-            open: true,
-            message: 'Project saved successfully!',
-            severity: 'success',
-          });
-          console.log('Project saved successfully:', response.data);
-        } else {
-          setSnackbar({
-            open: true,
-            message: 'Failed to save project: ' + (response.data?.message || 'Unknown error'),
-            severity: 'error',
-          });
-          console.error('Failed to save project:', response.data);
-        }
-      } catch (apiError: any) {
-        console.error('API error saving project:', apiError);
+      // Log FormData contents
+      console.log('FormData contents:');
+      for (const pair of formData.entries()) {
+        console.log(pair[0], ':', pair[1]);
+      }
+      
+      // Determine whether to create a new project or update an existing one
+      let response;
+      if (projectId) {
+        console.log(`Updating project ${projectId}`);
+        response = await projectsAPI.update(projectId, formData);
+      } else {
+        console.log('Creating new project');
+        response = await projectsAPI.create(formData);
+      }
+      
+      // Handle the response
+      if (response.data && response.data.success) {
+        // Show success message
         setSnackbar({
           open: true,
-          message: `Server error: ${apiError.response?.status || ''} ${apiError.response?.data?.message || apiError.message || 'Unknown error'}`,
-          severity: 'error',
+          message: 'Project saved successfully',
+          severity: 'success',
         });
+        console.log('Project saved successfully:', response.data);
+      } else {
+        throw new Error(response.data?.message || 'Failed to save project');
       }
-      
-      // Set saving to false regardless of success or failure
-      setIsSaving(false);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error saving project:', error);
       setSnackbar({
         open: true,
-        message: `Error saving project: ${error.message || 'Unknown error'}`,
+        message: 'Error saving project',
         severity: 'error',
       });
-      setIsSaving(false); // Make sure to set saving to false on error
+    } finally {
+      setIsSaving(false); // Hide loading overlay
     }
   };
 
   // Update how handleSave is called to ensure it shows loading indicator
   const handleSave = async () => {
+    console.log('handleSave called');
     // Check if the fabric has changed from the original
     const fabricChanged = selectedCarouselProduct && originalProductId && 
       selectedCarouselProduct !== originalProductId;
@@ -1431,15 +1357,18 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
     });
     
     try {
+      console.log('Setting isSaving to true');
       // Set saving state to true immediately to prevent further interactions
       setIsSaving(true);
       
       if (fabricChanged) {
+        console.log('Fabric changed, showing confirmation dialog');
         // Show confirmation dialog
         setPendingSaveAction(true);
         setShowFabricChangeDialog(true);
         // Don't set isSaving to false here, as we'll do it in saveProjectWithCurrentFabric or when dialog is closed
       } else {
+        console.log('No fabric change, proceeding with save');
         // No fabric change, proceed with save
         await saveProjectWithCurrentFabric();
       }
@@ -1669,7 +1598,7 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
               right: 0,
               bottom: 0,
               backgroundImage: 'linear-gradient(to right, rgba(221, 221, 221, 0.7) 1px, transparent 1px), linear-gradient(to bottom, rgba(221, 221, 221, 0.7) 1px, transparent 1px)',
-              backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
+            backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
               pointerEvents: 'none',
               zIndex: 2,
             }
@@ -2383,9 +2312,6 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
       console.warn("Could not find material with ID:", materialId);
     }
   };
-
-  // Add state to track product category
-  const [productCategory, setProductCategory] = useState<string>('');
 
   // Add useEffect to reset carousel page when filters change
   useEffect(() => {
@@ -3188,8 +3114,9 @@ const DesignPage: React.FC<DesignPageProps> = ({ projectId, projectData }) => {
         <Box sx={{ 
           p: 1.5,
           position: 'relative',
-            width: '100%', // Ensure full width
-        }}>
+          width: '100%', // Ensure full width
+        }}
+          id="design-area-container">
             {renderDraggableArea('Body')}
         </Box>
       </Box>

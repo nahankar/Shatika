@@ -69,11 +69,28 @@ const DIYPage = () => {
     return import.meta.env.VITE_API_URL || '';
   };
 
-  // Function to get proper image URL
-  const getImageUrl = (path: string | undefined) => {
-    if (!path) return '';
-    if (path.startsWith('http')) return path;
-    return `${getApiUrl()}${path}`;
+  // Updated getImageUrl function to handle design thumbnails and fallback to fabric images
+  const getImageUrl = (imagePath: string) => {
+    if (!imagePath) return '';
+    return imagePath.startsWith('data:')
+      ? imagePath  // Already a data URL (thumbnail)
+      : imagePath.startsWith('http')
+        ? imagePath  // Already a full URL
+        : `http://localhost:5173${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;  // Local path
+  };
+
+  // Helper function to get the best available image for a project
+  const getProjectImageUrl = (project: any) => {
+    // Prefer design thumbnail if available
+    if (project.designThumbnail) {
+      return getImageUrl(project.designThumbnail);
+    }
+    // Fall back to fabric image if available
+    if (project.fabricImage) {
+      return getImageUrl(project.fabricImage);
+    }
+    // Default placeholder if no images available
+    return '';
   };
 
   // Function to get category name by ID
@@ -311,11 +328,11 @@ const DIYPage = () => {
                       boxShadow: '0 4px 8px rgba(0,0,0,0.15)'
                     }
                   }}>
-                    {project.fabricImage && viewMode === 'grid' && (
+                    {viewMode === 'grid' && getProjectImageUrl(project) && (
                       <CardMedia
                         component="img"
                         height={viewMode === 'grid' ? '160px' : '200px'}
-                        image={getImageUrl(project.fabricImage)}
+                        image={getProjectImageUrl(project)}
                         alt={project.name}
                         sx={{ width: '100%', objectFit: 'cover' }}
                       />
@@ -387,10 +404,10 @@ const DIYPage = () => {
                         )}
                       </Box>
                       
-                      {project.fabricImage && viewMode === 'list' && (
+                      {viewMode === 'list' && getProjectImageUrl(project) && (
                         <Box sx={{ mt: 2 }}>
                           <img
-                            src={getImageUrl(project.fabricImage)}
+                            src={getProjectImageUrl(project)}
                             alt={project.name}
                             style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain' }}
                           />
