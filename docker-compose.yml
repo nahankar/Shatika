@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  backend:
+    image: ghcr.io/nahankar/shatika-backend:latest
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      - NODE_ENV=production
+      - MONGO_URI=mongodb+srv://your_username:your_password@your_cluster.mongodb.net/shatika
+      - JWT_SECRET=your_jwt_secret_key
+      - CLOUDINARY_CLOUD_NAME=your_cloudinary_name
+      - CLOUDINARY_API_KEY=your_cloudinary_api_key
+      - CLOUDINARY_API_SECRET=your_cloudinary_api_secret
+    volumes:
+      - ./server/temp:/app/temp
+    restart: always
+
+  frontend:
+    image: ghcr.io/nahankar/shatika-frontend:latest
+    ports:
+      - "80:80"
+    environment:
+      - API_URL=http://backend:5001
+    depends_on:
+      - backend
+    restart: always 
