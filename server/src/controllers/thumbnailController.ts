@@ -144,8 +144,16 @@ export const captureDesignThumbnail = async (req: Request, res: Response) => {
     
     // Launch browser and capture screenshot
     const browser = await puppeteer.launch({
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-features=site-per-process',
+        '--js-flags=--max-old-space-size=512'
+      ]
     });
     
     const page = await browser.newPage();
