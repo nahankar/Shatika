@@ -8,21 +8,23 @@ services:
     environment:
       - PORT=5001
       - NODE_ENV=production
-      - MONGO_URI=mongodb+srv://your_username:your_password@your_cluster.mongodb.net/shatika
-      - JWT_SECRET=your_jwt_secret_key
-      - CLOUDINARY_CLOUD_NAME=your_cloudinary_name
-      - CLOUDINARY_API_KEY=your_cloudinary_api_key
-      - CLOUDINARY_API_SECRET=your_cloudinary_api_secret
+      - MONGODB_URI=mongodb+srv://admindb:admindb@shatika0.upf2h.mongodb.net/shatika?retryWrites=true&w=majority&appName=shatika0
+      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+      - CLOUDINARY_CLOUD_NAME=dfashwxf0
+      - CLOUDINARY_API_KEY=625616318298377
+      - CLOUDINARY_API_SECRET=bcVA_ZCrscBO6crf9FJF4UKVORQ
     volumes:
-      - ./server/temp:/app/temp
+      - ./temp:/app/temp
     restart: always
 
   frontend:
     image: ghcr.io/nahankar/shatika-frontend:latest
+    environment:
+      - VITE_API_URL=http://144.24.135.139:5001
     ports:
       - "80:80"
-    environment:
-      - API_URL=http://backend:5001
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       - backend
     restart: always 
