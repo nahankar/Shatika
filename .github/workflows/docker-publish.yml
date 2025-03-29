@@ -51,5 +51,5 @@ jobs:
           context: ./client/client
           push: true
           build-args: |
-            VITE_API_URL=http://api.shatika.com/api
+            VITE_API_URL=http://api.shatika.com
           tags: ${{ env.REGISTRY }}/${{ env.frontend_name }}:latest 
