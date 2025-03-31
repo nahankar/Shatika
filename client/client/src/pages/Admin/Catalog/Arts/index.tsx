@@ -28,7 +28,9 @@ import { useSnackbar } from 'notistack';
 import { artsAPI, productsAPI } from '../../../../services/api';
 
 // Add API base URL for images
-const API_BASE_URL = 'http://localhost:5001'; // Make sure this matches your backend server
+const API_BASE_URL = window.location.protocol === 'https:' 
+  ? `${window.location.origin}` 
+  : 'http://localhost:5001'; // Use current origin in HTTPS or fallback to localhost
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2YwZjBmMCIvPjxwYXRoIGQ9Ik04NSA3MGgyNXYyNUg4NXoiIGZpbGw9IiM5OTkiLz48cGF0aCBkPSJNNzAgODB2NDBsNjAgLTQweiIgZmlsbD0iIzk5OSIvPjwvc3ZnPg==';
 
 // Helper function to get full image URL
