@@ -13,6 +13,8 @@ import {
   MenuItem,
   Avatar,
   Tooltip,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
@@ -24,14 +26,25 @@ import { selectCartTotalQuantity } from '../../redux/slices/cartSlice';
 const Navbar = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isAuthenticated = useSelector(selectIsAuthenticated);
   const user = useSelector(selectUser);
   const favoriteItems = useSelector((state: RootState) => state.favorites.items);
   const cartQuantity = useSelector(selectCartTotalQuantity);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = useState<null | HTMLElement>(null);
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
+  };
+
+  const handleMobileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setMobileMenuAnchorEl(event.currentTarget);
+  };
+
+  const handleMobileMenuClose = () => {
+    setMobileMenuAnchorEl(null);
   };
 
   const handleClose = () => {
@@ -41,7 +54,13 @@ const Navbar = () => {
   const handleLogout = () => {
     dispatch(logout());
     handleClose();
+    handleMobileMenuClose();
     navigate('/');
+  };
+
+  const navigateTo = (path: string) => {
+    handleMobileMenuClose();
+    navigate(path);
   };
 
   return (
@@ -51,6 +70,7 @@ const Navbar = () => {
           edge="start"
           color="inherit"
           aria-label="menu"
+          onClick={handleMobileMenuOpen}
           sx={{ mr: 2, display: { sm: 'none' } }}
         >
           <MenuIcon />
@@ -94,7 +114,7 @@ const Navbar = () => {
               </IconButton>
 
               <Box sx={{ display: 'flex', alignItems: 'center', ml: 1 }}>
-                <Typography variant="body1" sx={{ mr: 1 }}>
+                <Typography variant="body1" sx={{ mr: 1, display: { xs: 'none', sm: 'block' } }}>
                   {user?.name}
                 </Typography>
                 <IconButton
@@ -141,6 +161,47 @@ const Navbar = () => {
             </Button>
           )}
         </Box>
+
+        {/* Mobile Menu */}
+        <Menu
+          id="mobile-menu"
+          anchorEl={mobileMenuAnchorEl}
+          keepMounted
+          open={Boolean(mobileMenuAnchorEl)}
+          onClose={handleMobileMenuClose}
+          anchorOrigin={{
+            vertical: 'top',
+            horizontal: 'right',
+          }}
+          transformOrigin={{
+            vertical: 'top',
+            horizontal: 'right',
+          }}
+          sx={{ mt: 4 }}
+        >
+          <MenuItem onClick={() => navigateTo('/products')}>
+            Products
+          </MenuItem>
+          <MenuItem onClick={() => navigateTo(isAuthenticated ? '/diy' : '/login?returnUrl=/diy')}>
+            DIY
+          </MenuItem>
+          {isAuthenticated ? [
+              <MenuItem key="profile" onClick={() => navigateTo('/profile')}>
+                Profile
+              </MenuItem>,
+              user?.role === 'admin' && 
+                <MenuItem key="admin" onClick={() => navigateTo('/admin')}>
+                  Admin Dashboard
+                </MenuItem>,
+              <MenuItem key="logout" onClick={handleLogout}>
+                Logout
+              </MenuItem>
+            ] : 
+            <MenuItem onClick={() => navigateTo('/login')}>
+              Login
+            </MenuItem>
+          }
+        </Menu>
       </Toolbar>
     </AppBar>
   );
