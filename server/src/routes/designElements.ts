@@ -4,6 +4,7 @@ import {
   createDesignElement,
   updateDesignElement,
   deleteDesignElement,
+  toggleStatus,
 } from '../controllers/designElementController';
 import { protect, restrictTo } from '../middleware/authMiddleware';
 
@@ -17,7 +18,8 @@ router.use(protect);
 router.use(restrictTo('admin'));
 
 router.post('/', createDesignElement);
-router.patch('/:id', updateDesignElement);
+router.put('/:id', updateDesignElement);
+router.patch('/:id/toggle', toggleStatus);
 router.delete('/:id', deleteDesignElement);
 
 export default router; 

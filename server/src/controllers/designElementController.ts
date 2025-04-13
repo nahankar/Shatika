@@ -67,6 +67,46 @@ export const createDesignElement = async (req: Request, res: Response): Promise<
   }
 };
 
+// Toggle design element status
+export const toggleStatus = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { isActive } = req.body;
+    
+    if (isActive === undefined) {
+      res.status(400).json({
+        success: false,
+        message: 'isActive status is required',
+      });
+      return;
+    }
+
+    const element = await DesignElement.findByIdAndUpdate(
+      req.params.id,
+      { isActive },
+      { new: true, runValidators: true }
+    );
+
+    if (!element) {
+      res.status(404).json({
+        success: false,
+        message: 'Design element not found',
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: element,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: 'Error toggling design element status',
+      error: error.message,
+    });
+  }
+};
+
 // Update design element
 export const updateDesignElement = async (req: Request, res: Response): Promise<void> => {
   try {
